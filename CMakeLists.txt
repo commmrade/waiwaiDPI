@@ -78,7 +78,6 @@ endif()
 include(CTest)
 
 if(BUILD_TESTING)
-  message(AUTHOR_WARNING "Building Tests. Be sure to check out test/constexpr_tests.cpp for constexpr testing")
   add_subdirectory(test)
 endif()
 
@@ -113,7 +112,7 @@ include(cmake/PackageProject.cmake)
 # we know we want to ship
 waiwaiDPI_package_project(
   TARGETS
-  intro
+  main
   waiwaiDPI_options
   waiwaiDPI_warnings
   # FIXME: this does not work! CK
