@@ -10,7 +10,7 @@ enum class L7Proto
 {
     UNKNOWN,
     HTTP,
-    TLS
+    TLS_HANDSHAKE,
 };
 
 struct Packet
@@ -28,9 +28,9 @@ private:
     ConnTracker* tracker_{nullptr};
 
     bool try_http(std::span<const char> payload);
-    bool try_tls(std::span<const char> payload);
+    bool try_tls_handshake(std::span<const char> payload);
 public:
-    Classifier(ConnTracker* tracker) : tracker_(tracker) {}
+    explicit Classifier(ConnTracker* tracker) : tracker_(tracker) {}
     Packet classify(std::span<const char> packet);
 };
 

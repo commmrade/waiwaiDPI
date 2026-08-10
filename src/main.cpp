@@ -4,6 +4,7 @@
 #include "nfq.hpp"
 #include <arpa/inet.h>
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <libmnl/libmnl.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
@@ -52,12 +53,16 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     inet_ntop(AF_INET, &ip->saddr, ip_src.data(), ip_src.size());
     inet_ntop(AF_INET, &ip->daddr, ip_dst.data(), ip_dst.size());
 
-    std::println("Packet from {} to {}", ip_src.data(), ip_dst.data());
+    // std::println("Packet from {} to {}", ip_src.data(), ip_dst.data());
 
 
     auto cfed_pkt = ctx->classifier->classify(packet);
     if (cfed_pkt.payload_proto == L7Proto::HTTP) {
         std::println("IT IS HTTP: {}", std::string_view{cfed_pkt.payload});
+    } else if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
+        if (!std::strcmp(ip_dst.data(), "95.85.248.84")) {
+            std::println("WE GOT A TLS HANDSHAKE");
+        }
     }
 
     ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);

@@ -28,8 +28,23 @@ bool Classifier::try_http(std::span<const char> payload)
 }
 
 
-bool Classifier::try_tls(std::span<const char> payload)
+bool Classifier::try_tls_handshake(std::span<const char> payload)
 {
+    // TODO: MIND THE FACT THAT TLS MAY BE SPLIT ACROSS PACKETS AND I HAVE TO USE COn. TRACKER
+
+    if (payload.size() < 3) {
+        return false; // weird shit
+    }
+
+    if (payload[0] != 0x16) {
+        return false; // it maybe be TLS, but not handshake
+        // we do not care about non-handshake TLS
+    }
+
+    if (payload[1] != 0x03 && payload[2] != 0x03) {
+        return false; // does not look like a TLS signature
+    }
+
     return true;
 }
 
@@ -53,8 +68,8 @@ Packet Classifier::classify(std::span<const char> packet)
     }
 
     { // TLS Block
-        if (try_tls(payload)) {
-            pkt.payload_proto = L7Proto::TLS;
+        if (try_tls_handshake(payload)) {
+            pkt.payload_proto = L7Proto::TLS_HANDSHAKE;
         }
     }
 
