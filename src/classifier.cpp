@@ -3,8 +3,11 @@
 //
 #include "classifier.hpp"
 
+#include <cstdint>
+#include <cstring>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
+#include <print>
 #include <string_view>
 
 bool Classifier::try_http(std::span<const char> payload)
@@ -42,8 +45,16 @@ bool Classifier::try_tls_handshake(std::span<const char> payload)
     }
 
     if (payload[1] != 0x03 && payload[2] != 0x03) {
+        // TODO: Fallback to Con. Tracker
+
+        std::uint16_t tls_len{};
+        std::memcpy(&tls_len, payload.data() + 3, sizeof(std::uint16_t));
+        tls_len = ntohs(tls_len);
+
         return false; // does not look like a TLS signature
     }
+
+
 
     return true;
 }

@@ -7,7 +7,9 @@ add_executable(main main.cpp
         nfq.hpp
         nfq.cpp
         conn_tracker.hpp
-        classifier.cpp)
+        classifier.cpp
+        conn_tracker.cpp
+        protocol.hpp)
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
 target_link_libraries(

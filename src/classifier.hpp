@@ -4,14 +4,11 @@
 
 #ifndef WAIWAIDPI_CLASSIFIER_HPP
 #define WAIWAIDPI_CLASSIFIER_HPP
-#include <span>
 
-enum class L7Proto
-{
-    UNKNOWN,
-    HTTP,
-    TLS_HANDSHAKE,
-};
+#include <span>
+#include "protocol.hpp"
+
+
 
 struct Packet
 {
