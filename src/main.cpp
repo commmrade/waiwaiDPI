@@ -54,6 +54,12 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
 
     std::println("Packet from {} to {}", ip_src.data(), ip_dst.data());
 
+
+    auto cfed_pkt = ctx->classifier->classify(packet);
+    if (cfed_pkt.payload_proto == L7Proto::HTTP) {
+        std::println("IT IS HTTP: {}", std::string_view{cfed_pkt.payload});
+    }
+
     ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
     if (ret < 0) {
         perror("send verdict");
