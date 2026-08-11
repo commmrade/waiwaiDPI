@@ -53,7 +53,8 @@ bool Classifier::try_tls_handshake(const iphdr* iph, const tcphdr* tcph, std::sp
         return false; // weird shit, packet is probably broken
     }
 
-    if (payload[0] != 0x16 && payload[1] != 0x03 && payload[2] != 0x03) {
+    constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
+    if (payload[0] != TLS_HANDSHAKE_TYPE && payload[1] != 0x03 && payload[2] != 0x03) {
         return false; // it is not TLS handshake
     }
 
@@ -75,11 +76,11 @@ bool Classifier::try_tls_handshake(const iphdr* iph, const tcphdr* tcph, std::sp
 }
 L7Proto Classifier::try_payload(std::span<const char> packet)
 {
-    const iphdr* iph = reinterpret_cast<const iphdr*>(packet.data());
-    const tcphdr* tcph = reinterpret_cast<const tcphdr*>(packet.data() + iph->ihl * 4);
-    const std::size_t headers_size = iph->ihl * 4 + tcph->doff * 4;
+    const auto* iph = reinterpret_cast<const iphdr*>(packet.data());
+    const auto* tcph = reinterpret_cast<const tcphdr*>(std::next(packet.data(), iph->ihl * 4));
+    const std::ptrdiff_t headers_size = iph->ihl * 4 + tcph->doff * 4;
 
-    std::span<const char> const payload{packet.data() + headers_size, packet.size() - headers_size};
+    std::span<const char> const payload{std::next(packet.data(), headers_size), packet.size() - static_cast<std::size_t>(headers_size)};
 
     { // HTTP Block
         if (try_http(payload)) {
@@ -101,8 +102,8 @@ Packet Classifier::classify(std::span<const char> packet)
     Packet pkt;
     pkt.packet = packet;
 
-    const iphdr* iph = reinterpret_cast<const iphdr*>(packet.data());
-    const tcphdr* tcph = reinterpret_cast<const tcphdr*>(packet.data() + iph->ihl * 4);
+    const auto* iph = reinterpret_cast<const iphdr*>(packet.data());
+    const auto* tcph = reinterpret_cast<const tcphdr*>(std::next(packet.data(), iph->ihl * 4));
     const std::size_t headers_size = iph->ihl * 4 + tcph->doff * 4;
     std::span<const char> const payload{packet.data() + headers_size, packet.size() - headers_size};
 

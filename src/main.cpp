@@ -34,14 +34,14 @@ std::string test_get_sni(std::span<const char> payload)
     payload = payload.subspan(1);
 
     std::uint32_t ch_len{};
-    std::memcpy(reinterpret_cast<char*>(&ch_len) + 1, payload.data(), 3);
+    std::memcpy(std::next(reinterpret_cast<char*>(&ch_len), 1), payload.data(), 3);
     ch_len = ntohl(ch_len);
     payload = payload.subspan(3);
     std::println("CH LEN: {}", ch_len);
 
     payload = payload.subspan(34);
 
-    std::uint8_t leg_ses_id_len = *payload.data();
+    std::uint8_t const leg_ses_id_len = *payload.data();
     payload = payload.subspan(leg_ses_id_len + 1);
 
     std::uint16_t cip_suit_len{};
@@ -49,7 +49,7 @@ std::string test_get_sni(std::span<const char> payload)
     cip_suit_len = ntohs(cip_suit_len);
     payload = payload.subspan(sizeof(cip_suit_len) + cip_suit_len);
 
-    std::uint8_t compression_methods_len = *payload.data();
+    std::uint8_t const compression_methods_len = *payload.data();
     payload = payload.subspan(1 + compression_methods_len); // ✅
 
     std::uint16_t ext_length{};
@@ -120,7 +120,8 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     const iphdr* ip = reinterpret_cast<const iphdr*>(packet.data());
     const tcphdr* tcp = reinterpret_cast<const tcphdr*>(packet.data() + ip->ihl * 4);
 
-    std::array<char, INET_ADDRSTRLEN> ip_src{}, ip_dst{};
+    std::array<char, INET_ADDRSTRLEN> ip_src{};
+    std::array<char, INET_ADDRSTRLEN> ip_dst{};
     inet_ntop(AF_INET, &ip->saddr, ip_src.data(), ip_src.size());
     inet_ntop(AF_INET, &ip->daddr, ip_dst.data(), ip_dst.size());
 
@@ -146,7 +147,7 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
                 for (const auto& buf : conn.reasm_.frags) {
                     const iphdr* iph = reinterpret_cast<const iphdr*>(buf.data());
                     const tcphdr* tcph = reinterpret_cast<const tcphdr*>(buf.data() + ip->ihl * 4);
-                    std::span<const char> payload{buf.data() + (iph->ihl * 4) + (tcph->doff * 4), buf.size() - (iph->ihl * 4) - (tcph->doff * 4)};
+                    std::span<const char> const payload{buf.data() + (iph->ihl * 4) + (tcph->doff * 4), buf.size() - (iph->ihl * 4) - (tcph->doff * 4)};
 
                     std::println("payload size: {}", payload.size());
 

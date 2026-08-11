@@ -11,10 +11,10 @@
 void ConnTracker::track(std::span<const char> packet)
 {
     const auto* iph = reinterpret_cast<const iphdr*>(packet.data());
-    const auto* tcph = reinterpret_cast<const tcphdr*>(packet.data() + iph->ihl * 4);
+    const auto* tcph = reinterpret_cast<const tcphdr*>(std::next(packet.data(), iph->ihl * 4));
     const std::ptrdiff_t headers_size = (iph->ihl * 4) + (tcph->doff * 4);
 
-    std::span<const char> payload{packet.data() + headers_size, packet.size() - headers_size};
+    std::span<const char> const payload{std::next(packet.data(), headers_size), packet.size() - static_cast<std::size_t>(headers_size)};
 
     const std::tuple conn_tuple{iph->saddr, tcph->source, iph->daddr, tcph->dest};
 
