@@ -8,6 +8,7 @@
 enum class L7Proto
 {
     UNKNOWN,
+    REASSEMBLING,
     HTTP,
     TLS_HANDSHAKE,
 };

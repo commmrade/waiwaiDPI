@@ -7,5 +7,6 @@
 
 constexpr auto DEAD_CONNECTION_TIMEOUT_SECS = 60;
 constexpr auto CHECK_DEAD_CONNECTIONS_INTERVAL_SECS = 10;
+constexpr auto HTTP_PARSE_LIMIT = 8000;
 
 #endif// WAIWAIDPI_CONSTS_HPP
