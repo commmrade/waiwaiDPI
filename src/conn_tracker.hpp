@@ -32,6 +32,8 @@ private:
 
     bool is_done_{false}; // should this connection be handled later on? TEMPORARY
 public:
+    bool is_reassembling() const { return reasm_.pos > 0 || reasm_.total_size > 0; }
+
     void add_reasm_frag(std::span<const char> frag)
     {
         reasm_.frags.emplace_back(frag.begin(), frag.end());

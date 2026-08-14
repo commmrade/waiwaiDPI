@@ -20,14 +20,21 @@ struct Packet
     // TODO: Payload proto specific information (as an optimization to avoid doing the same thing in Modifier component
 };
 
+enum class ParseResult
+{
+    ERROR,
+    REASSEMBLING,
+    SUCCESS
+};
+
 class ConnTracker;
 class Classifier
 {
 private:
     ConnTracker* tracker_{nullptr};
 
-    bool try_http(std::span<const char> payload);
-    bool try_tls_handshake(const iphdr* iph, const tcphdr* tcph, std::span<const char> packet, std::span<const char> payload);
+    ParseResult try_http(const iphdr* iph, const tcphdr* tcph, std::span<const char> packet, std::span<const char> payload);
+    ParseResult try_tls_handshake(const iphdr* iph, const tcphdr* tcph, std::span<const char> packet, std::span<const char> payload);
 
     L7Proto try_payload(std::span<const char> packet);
 public:
