@@ -8,6 +8,8 @@
 #include <map>
 #include <span>
 #include "protocol.hpp"
+
+#include <chrono>
 #include <vector>
 
 class Connection
@@ -15,6 +17,8 @@ class Connection
 private:
     std::size_t bytes_transfered_{0};
     std::size_t packet_count_{0};
+
+    std::chrono::time_point<std::chrono::system_clock> last_packet_time_;
 
     L7Proto payload_proto_{L7Proto::UNKNOWN};
 
@@ -79,6 +83,15 @@ public:
         ++packet_count_;
     }
 
+    [[nodiscard]] auto get_last_packet_time() const
+    {
+        return last_packet_time_;
+    }
+    void update_last_packet_time()
+    {
+        last_packet_time_ = std::chrono::system_clock::now();
+    }
+
     [[nodiscard]] L7Proto payload_proto() const
     {
         return payload_proto_;
@@ -105,6 +118,11 @@ private:
 public:
     void track(std::span<const char> packet);
     Connection& get_conn(const std::uint32_t saddr, const std::uint16_t source, const std::uint32_t daddr, const std::uint16_t dest);
+    [[nodiscard]] std::size_t conns_size() const
+    {
+        return conns_.size();
+    }
+    void clear_dead_connections();
 };
 
 #endif// WAIWAIDPI_CONN_TRACKER_HPP

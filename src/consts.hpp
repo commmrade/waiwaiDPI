@@ -1,0 +1,11 @@
+//
+// Created by klewy on 8/14/26.
+//
+
+#ifndef WAIWAIDPI_CONSTS_HPP
+#define WAIWAIDPI_CONSTS_HPP
+
+constexpr auto DEAD_CONNECTION_TIMEOUT_SECS = 60;
+constexpr auto CHECK_DEAD_CONNECTIONS_INTERVAL_SECS = 10;
+
+#endif// WAIWAIDPI_CONSTS_HPP

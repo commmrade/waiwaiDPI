@@ -4,6 +4,8 @@
 
 #include "conn_tracker.hpp"
 
+#include "consts.hpp"
+
 #include <cassert>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -25,6 +27,7 @@ void ConnTracker::track(std::span<const char> packet)
         conn_iter = iter;
     }
 
+    conn_iter->second.update_last_packet_time();
     conn_iter->second.set_bytes_transfered(conn_iter->second.bytes_transfered() + payload.size());
     conn_iter->second.count_packet();
 }
@@ -34,4 +37,18 @@ Connection &ConnTracker::get_conn(const std::uint32_t saddr,
     const std::uint16_t dest)
 {
     return conns_.at({saddr, source, daddr, dest});
+}
+
+void ConnTracker::clear_dead_connections()
+{
+    auto iter = conns_.begin();
+    const auto now = std::chrono::system_clock::now();
+    while (iter != conns_.end()) {
+        const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - iter->second.get_last_packet_time());
+        if (dur.count() >= DEAD_CONNECTION_TIMEOUT_SECS) {
+            iter = conns_.erase(iter);
+        } else {
+            ++iter;
+        }
+    }
 }

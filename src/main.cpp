@@ -16,16 +16,15 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <print>
+#include "consts.hpp"
 
 struct Context
 {
     mnl_socket* sock{nullptr};
     Classifier* classifier{nullptr};
+
     ConnTracker* tracker{nullptr};
 };
-
-
-
 
 int cb_loop(const struct nlmsghdr* nlh, void* data)
 {
@@ -53,6 +52,7 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     std::span<const char> packet{static_cast<char*>(mnl_attr_get_payload(attrs[NFQA_PAYLOAD])), packet_len};
 
     const iphdr* ip = reinterpret_cast<const iphdr*>(packet.data());
+    // TODO: WHy only tcp??
     const tcphdr* tcp = reinterpret_cast<const tcphdr*>(packet.data() + ip->ihl * 4);
 
     std::array<char, INET_ADDRSTRLEN> ip_src{};
@@ -61,7 +61,6 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     inet_ntop(AF_INET, &ip->daddr, ip_dst.data(), ip_dst.size());
 
     ctx->tracker->track(packet);
-
     auto& conn = ctx->tracker->get_conn(ip->saddr, tcp->source, ip->daddr, tcp->dest);
 
     if (!conn.is_done()) {
@@ -70,7 +69,6 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
         } else if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
             if (std::strcmp(ip_dst.data(), "95.85.248.84") == 0) {
                 std::println("FULL TLS Client hello: {} == {}", conn.get_reasm_pos(), conn.get_reasm_total_size());
-
                 conn.set_done(true);
             }
         }
@@ -137,8 +135,20 @@ int main(int argc, char *argv[])
     ctx.classifier = &cfier;
     ctx.tracker = &tracker;
 
+    auto last_check_time = std::chrono::system_clock::now();
+
     for (;;) {
-        ssize_t rcvd = mnl_socket_recvfrom(socket, buf.data(), BUF_SIZE);
+        const auto now = std::chrono::system_clock::now();
+        const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - last_check_time);
+        if (dur.count() >= CHECK_DEAD_CONNECTIONS_INTERVAL_SECS) {
+            std::println("before clean up: {}", ctx.tracker->conns_size());
+            ctx.tracker->clear_dead_connections();
+            last_check_time = now;
+
+            std::println("after clean up: {}", ctx.tracker->conns_size());
+        }
+
+        ssize_t const rcvd = mnl_socket_recvfrom(socket, buf.data(), BUF_SIZE);
         if (rcvd < 0) {
             perror("mnl_socket_recvfrom");
             return EXIT_FAILURE;
