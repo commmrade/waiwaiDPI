@@ -30,6 +30,8 @@ struct Packet
     Packet() = default;
     explicit Packet(std::span<const char> packet)
     {
+        this->packet = packet;
+
         const auto* iph = reinterpret_cast<const iphdr*>(packet.data()); //NOLINT
         network_hdr = iph;
         transport_proto = iph->protocol;

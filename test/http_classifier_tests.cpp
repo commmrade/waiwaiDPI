@@ -17,9 +17,10 @@ TEST_CASE("Full HTTP is classified correctly", "[http_classifier]")
     ctx.tracker = &tracker;
 
     std::span<const char> packet{reinterpret_cast<const char*>(full_http_req), static_cast<size_t>(sizeof(full_http_req))};
+    Packet pkt{packet};
 
-    tracker.track(packet);
-    auto cfed_pkt = classifier.classify(packet);
+    tracker.track(pkt);
+    auto cfed_pkt = classifier.classify(pkt);
     REQUIRE(cfed_pkt.payload_proto == L7Proto::HTTP);
 }
 
@@ -64,17 +65,17 @@ TEST_CASE("Split HTTP is classified correctly", "[http_classifier]")
 
     std::vector<char> second_packet = construct_packet_from(second_fragment_payload, ip, tcp_second);
 
-    std::span<const char> first_packet_span(first_packet.data(), first_packet.size());
-    std::span<const char> second_packet_span(second_packet.data(), second_packet.size());
+    Packet first_pkt{first_packet};
+    Packet second_pkt{second_packet};
 
-    tracker.track(first_packet_span);
+    tracker.track(first_pkt);
 
-    auto cfed_pkt = classifier.classify(first_packet_span);
+    auto cfed_pkt = classifier.classify(first_pkt);
     REQUIRE(cfed_pkt.payload_proto == L7Proto::REASSEMBLING);
 
-    tracker.track(second_packet_span);
+    tracker.track(second_pkt);
 
-    cfed_pkt = classifier.classify(second_packet_span);
+    cfed_pkt = classifier.classify(second_pkt);
     REQUIRE(cfed_pkt.payload_proto == L7Proto::HTTP);
 }
 
@@ -119,16 +120,16 @@ TEST_CASE("Split HTTP at headers end", "[http_classifier]")
 
     std::vector<char> second_packet = construct_packet_from(second_fragment_payload, ip, tcp_second);
 
-    std::span<const char> first_packet_span(first_packet.data(), first_packet.size());
-    std::span<const char> second_packet_span(second_packet.data(), second_packet.size());
+    Packet first_pkt{first_packet};
+    Packet second_pkt{second_packet};
 
-    tracker.track(first_packet_span);
+    tracker.track(first_pkt);
 
-    auto cfed_pkt = classifier.classify(first_packet_span);
+    auto cfed_pkt = classifier.classify(first_pkt);
     REQUIRE(cfed_pkt.payload_proto == L7Proto::REASSEMBLING);
 
-    tracker.track(second_packet_span);
+    tracker.track(second_pkt);
 
-    cfed_pkt = classifier.classify(second_packet_span);
+    cfed_pkt = classifier.classify(second_pkt);
     REQUIRE(cfed_pkt.payload_proto == L7Proto::HTTP);
 }
