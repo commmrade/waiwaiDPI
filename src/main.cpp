@@ -24,72 +24,7 @@ struct Context
     ConnTracker* tracker{nullptr};
 };
 
-std::string test_get_sni(std::span<const char> payload)
-{
-    std::println("payloiad!!!!: {}", payload.size());
-    payload = payload.subspan(5);; // skip intro
 
-    constexpr int CLIENT_HELLO_TYPE = 0x01;
-    assert(*payload.data() == CLIENT_HELLO_TYPE);
-    payload = payload.subspan(1);
-
-    std::uint32_t ch_len{};
-    std::memcpy(std::next(reinterpret_cast<char*>(&ch_len), 1), payload.data(), 3);
-    ch_len = ntohl(ch_len);
-    payload = payload.subspan(3);
-    std::println("CH LEN: {}", ch_len);
-
-    payload = payload.subspan(34);
-
-    std::uint8_t const leg_ses_id_len = *payload.data();
-    payload = payload.subspan(leg_ses_id_len + 1);
-
-    std::uint16_t cip_suit_len{};
-    std::memcpy(&cip_suit_len, payload.data(), sizeof(cip_suit_len));
-    cip_suit_len = ntohs(cip_suit_len);
-    payload = payload.subspan(sizeof(cip_suit_len) + cip_suit_len);
-
-    std::uint8_t const compression_methods_len = *payload.data();
-    payload = payload.subspan(1 + compression_methods_len); // ✅
-
-    std::uint16_t ext_length{};
-    std::memcpy(&ext_length, payload.data(), sizeof(ext_length));
-    ext_length = ntohs(ext_length);
-    payload = payload.subspan(sizeof(ext_length), ext_length);
-
-    while (!payload.empty()) {
-        std::uint16_t ext_type{};
-        std::memcpy(&ext_type, payload.data(), sizeof(ext_type));
-        ext_type = ntohs(ext_type);
-        payload = payload.subspan(sizeof(ext_type));
-
-        std::uint16_t ext_len{};
-        std::memcpy(&ext_len, payload.data(), sizeof(ext_len));
-        ext_len = ntohs(ext_len);
-        payload = payload.subspan(sizeof(ext_len));
-
-        if (ext_type != 0x00) {
-            payload = payload.subspan(ext_len);
-            continue;
-        }
-
-        // contains server name list
-        // skip serve rname list len
-        payload = payload.subspan(2);
-
-        assert(*payload.data() == 0x00);
-        payload = payload.subspan(1);
-
-        std::uint16_t hostname_len{};
-        std::memcpy(&hostname_len, payload.data(), sizeof(hostname_len));
-        hostname_len = ntohs(hostname_len);
-        payload = payload.subspan(sizeof(hostname_len));
-
-        return std::string{payload.data(), hostname_len};
-    }
-
-    return {};
-}
 
 
 int cb_loop(const struct nlmsghdr* nlh, void* data)
@@ -125,7 +60,6 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     inet_ntop(AF_INET, &ip->saddr, ip_src.data(), ip_src.size());
     inet_ntop(AF_INET, &ip->daddr, ip_dst.data(), ip_dst.size());
 
-    assert(ctx->tracker);
     ctx->tracker->track(packet);
 
     auto& conn = ctx->tracker->get_conn(ip->saddr, tcp->source, ip->daddr, tcp->dest);
@@ -133,29 +67,11 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     if (!conn.is_done()) {
         auto cfed_pkt = ctx->classifier->classify(packet);
         if (cfed_pkt.payload_proto == L7Proto::HTTP) {
-            std::println("IT IS HTTP: {}", std::string_view{cfed_pkt.payload});
         } else if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
-            if (std::strcmp(ip_dst.data(), "95.85.248.84") == 0 || true) {
-                std::println("FULL TLS Client hello: {} == {}", conn.reasm_.pos, conn.reasm_.total_size);
-                if (conn.reasm_.total_size == 0) {
-                    return MNL_CB_OK;
-                }
+            if (std::strcmp(ip_dst.data(), "95.85.248.84") == 0) {
+                std::println("FULL TLS Client hello: {} == {}", conn.get_reasm_pos(), conn.get_reasm_total_size());
 
-                std::vector<char> tls_buf;
-                tls_buf.reserve(conn.reasm_.total_size);
-
-                for (const auto& buf : conn.reasm_.frags) {
-                    const iphdr* iph = reinterpret_cast<const iphdr*>(buf.data());
-                    const tcphdr* tcph = reinterpret_cast<const tcphdr*>(buf.data() + ip->ihl * 4);
-                    std::span<const char> const payload{buf.data() + (iph->ihl * 4) + (tcph->doff * 4), buf.size() - (iph->ihl * 4) - (tcph->doff * 4)};
-
-                    std::println("payload size: {}", payload.size());
-
-                    tls_buf.insert(tls_buf.end(), payload.begin(), payload.end());
-                }
-
-                const auto sni = test_get_sni(tls_buf);
-                std::println("Found this SNI in TLS Client Hello: {}", sni);
+                conn.set_done(true);
             }
         }
     }
@@ -239,3 +155,75 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 }
+
+
+// std::string test_get_sni(std::span<const char> payload)
+// {
+//     std::println("payloiad!!!!: {}", payload.size());
+//     if (payload.size() < 10) {
+//         return {};
+//     }
+//
+//     payload = payload.subspan(5);; // skip intro
+//
+//     constexpr int CLIENT_HELLO_TYPE = 0x01;
+//     assert(*payload.data() == CLIENT_HELLO_TYPE);
+//     payload = payload.subspan(1);
+//
+//     std::uint32_t ch_len{};
+//     std::memcpy(std::next(reinterpret_cast<char*>(&ch_len), 1), payload.data(), 3);
+//     ch_len = ntohl(ch_len);
+//     payload = payload.subspan(3);
+//     std::println("CH LEN: {}", ch_len);
+//
+//     payload = payload.subspan(34);
+//
+//     std::uint8_t const leg_ses_id_len = *payload.data();
+//     payload = payload.subspan(leg_ses_id_len + 1);
+//
+//     std::uint16_t cip_suit_len{};
+//     std::memcpy(&cip_suit_len, payload.data(), sizeof(cip_suit_len));
+//     cip_suit_len = ntohs(cip_suit_len);
+//     payload = payload.subspan(sizeof(cip_suit_len) + cip_suit_len);
+//
+//     std::uint8_t const compression_methods_len = *payload.data();
+//     payload = payload.subspan(1 + compression_methods_len); // ✅
+//
+//     std::uint16_t ext_length{};
+//     std::memcpy(&ext_length, payload.data(), sizeof(ext_length));
+//     ext_length = ntohs(ext_length);
+//     payload = payload.subspan(sizeof(ext_length), ext_length);
+//
+//     while (!payload.empty()) {
+//         std::uint16_t ext_type{};
+//         std::memcpy(&ext_type, payload.data(), sizeof(ext_type));
+//         ext_type = ntohs(ext_type);
+//         payload = payload.subspan(sizeof(ext_type));
+//
+//         std::uint16_t ext_len{};
+//         std::memcpy(&ext_len, payload.data(), sizeof(ext_len));
+//         ext_len = ntohs(ext_len);
+//         payload = payload.subspan(sizeof(ext_len));
+//
+//         if (ext_type != 0x00) {
+//             payload = payload.subspan(ext_len);
+//             continue;
+//         }
+//
+//         // contains server name list
+//         // skip serve rname list len
+//         payload = payload.subspan(2);
+//
+//         assert(*payload.data() == 0x00);
+//         payload = payload.subspan(1);
+//
+//         std::uint16_t hostname_len{};
+//         std::memcpy(&hostname_len, payload.data(), sizeof(hostname_len));
+//         hostname_len = ntohs(hostname_len);
+//         payload = payload.subspan(sizeof(hostname_len));
+//
+//         return std::string{payload.data(), hostname_len};
+//     }
+//
+//     return {};
+// }

@@ -37,12 +37,12 @@ bool Classifier::try_http(std::span<const char> payload)
 bool Classifier::try_tls_handshake(const iphdr* iph, const tcphdr* tcph, std::span<const char> packet, std::span<const char> payload)
 {
     auto& conn = tracker_->get_conn(iph->saddr, tcph->source, iph->daddr, tcph->dest);
-    if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE && conn.reasm_.pos > 0 /* && conn.tcp_next_expected == tcph->seq */) {
-        conn.reasm_.frags.emplace_back(packet.begin(), packet.end());
-        conn.reasm_.pos += payload.size();
-        conn.reasm_.expected_seq = static_cast<std::uint32_t>(ntohl(tcph->seq) + payload.size());
+    if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE && conn.get_reasm_pos() > 0 /* && conn.tcp_next_expected == tcph->seq */) {
+        conn.add_reasm_frag(packet);
+        conn.set_reasm_pos(conn.get_reasm_pos() + payload.size());
+        conn.set_reasm_expected_seq(static_cast<std::uint32_t>(ntohl(tcph->seq) + payload.size()));
 
-        if (conn.reasm_.pos == conn.reasm_.total_size) {
+        if (conn.get_reasm_pos() == conn.get_reasm_total_size()) {
             return true; // we got the whole TLS client hello, hooray
         }
 
@@ -63,10 +63,10 @@ bool Classifier::try_tls_handshake(const iphdr* iph, const tcphdr* tcph, std::sp
     tls_len = ntohs(tls_len);
 
     if (payload.size() < tls_len) { // fragmented, fuck
-        conn.reasm_.frags.emplace_back(packet.begin(), packet.end());
-        conn.reasm_.pos += payload.size();
-        conn.reasm_.expected_seq = static_cast<std::uint32_t>(ntohl(tcph->seq) + payload.size());
-        conn.reasm_.total_size = tls_len + 5; // +5 for record header
+        conn.add_reasm_frag(packet);
+        conn.set_reasm_pos(conn.get_reasm_pos() + payload.size());
+        conn.set_reasm_expected_seq(static_cast<std::uint32_t>(ntohl(tcph->seq) + payload.size()));
+        conn.set_reasm_total_size(tls_len + 5);
         conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
 
         return false; // this way packet won't be sent to modifier
@@ -105,7 +105,7 @@ Packet Classifier::classify(std::span<const char> packet)
     const auto* iph = reinterpret_cast<const iphdr*>(packet.data());
     const auto* tcph = reinterpret_cast<const tcphdr*>(std::next(packet.data(), iph->ihl * 4));
     const std::size_t headers_size = iph->ihl * 4 + tcph->doff * 4;
-    std::span<const char> const payload{packet.data() + headers_size, packet.size() - headers_size};
+    std::span<const char> const payload{std::next(packet.data(), static_cast<std::ptrdiff_t>(headers_size)), packet.size() - headers_size};
 
     if (payload.empty()) {
         return pkt;

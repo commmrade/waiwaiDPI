@@ -18,8 +18,6 @@ private:
 
     L7Proto payload_proto_{L7Proto::UNKNOWN};
 
-    bool is_done_{false}; // should this connection be handled later on?
-public:
     struct
     {
         std::vector<std::vector<char>> frags;
@@ -27,7 +25,42 @@ public:
         std::size_t total_size{0};
         std::uint32_t expected_seq{0};
     } reasm_;
+
+    bool is_done_{false}; // should this connection be handled later on? TEMPORARY
 public:
+    void add_reasm_frag(std::span<const char> frag)
+    {
+        reasm_.frags.emplace_back(frag.begin(), frag.end());
+    }
+    const std::vector<std::vector<char>>& get_reasm_frags() const
+    {
+        return reasm_.frags;
+    }
+    [[nodiscard]] std::size_t get_reasm_pos() const
+    {
+        return reasm_.pos;
+    }
+    void set_reasm_pos(const std::size_t pos)
+    {
+        reasm_.pos = pos;
+    }
+    [[nodiscard]] std::size_t get_reasm_total_size() const
+    {
+        return reasm_.total_size;
+    }
+    void set_reasm_total_size(const std::size_t total_size)
+    {
+        reasm_.total_size = total_size;
+    }
+    [[nodiscard]] std::uint32_t get_reasm_expected_seq() const
+    {
+        return reasm_.expected_seq;
+    }
+    void set_reasm_expected_seq(const std::uint32_t seq)
+    {
+        reasm_.expected_seq = seq;
+    }
+
     [[nodiscard]] std::size_t bytes_transfered() const
     {
         return bytes_transfered_;
