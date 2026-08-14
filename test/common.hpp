@@ -19,29 +19,29 @@ struct Context
     ConnTracker* tracker{nullptr};
 };
 
-inline void process_packet(Context* ctx, std::span<const char> packet)
-{
-    const iphdr* ip = reinterpret_cast<const iphdr*>(packet.data());
-    // TODO: WHy only tcp??
-    const tcphdr* tcp = reinterpret_cast<const tcphdr*>(packet.data() + ip->ihl * 4);
 
-    std::array<char, INET_ADDRSTRLEN> ip_src{};
-    std::array<char, INET_ADDRSTRLEN> ip_dst{};
-    inet_ntop(AF_INET, &ip->saddr, ip_src.data(), ip_src.size());
-    inet_ntop(AF_INET, &ip->daddr, ip_dst.data(), ip_dst.size());
+inline std::vector<char> construct_packet_from(std::span<const char> payload, const iphdr* old_ip, const tcphdr* old_tcp) {
+    std::vector<char> packet;
+    packet.resize(payload.size() + old_ip->ihl * 4 + old_tcp->doff * 4);
 
-    ctx->tracker->track(packet);
-    auto& conn = ctx->tracker->get_conn(ip->saddr, tcp->source, ip->daddr, tcp->dest);
+    char* ptr = packet.data();
+    iphdr* ip = reinterpret_cast<iphdr*>(ptr);
 
-    if (!conn.is_done()) {
-        auto cfed_pkt = ctx->classifier->classify(packet);
-        if (cfed_pkt.payload_proto == L7Proto::HTTP) {
-        } else if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
-            if (std::strcmp(ip_dst.data(), "95.85.248.84") == 0) {
-                conn.set_done(true);
-            }
-        }
-    }
+    const std::size_t ip_hdr_size = old_ip->ihl * 4;
+    std::memcpy(ip, old_ip, ip_hdr_size);
+    ptr += ip_hdr_size;
+
+    tcphdr* tcp = reinterpret_cast<tcphdr*>(ptr);
+    const std::size_t tcp_hdr_size = old_tcp->doff * 4;
+    std::memcpy(tcp, old_tcp, tcp_hdr_size);
+    ptr += tcp_hdr_size;
+
+    std::memcpy(ptr, payload.data(), payload.size());
+
+    ip->tot_len = htons(old_ip->ihl * 4 + old_tcp->doff * 4 + payload.size());
+
+    return packet;
 }
+
 
 #endif// WAIWAIDPI_COMMON_HPP
