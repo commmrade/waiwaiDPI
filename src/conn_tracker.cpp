@@ -3,22 +3,16 @@
 //
 
 #include "conn_tracker.hpp"
-
 #include "consts.hpp"
-
 #include <cassert>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 
-void ConnTracker::track(std::span<const char> packet)
+void ConnTracker::track(const Packet& packet)
 {
-    const auto* iph = reinterpret_cast<const iphdr*>(packet.data());
-    const auto* tcph = reinterpret_cast<const tcphdr*>(std::next(packet.data(), iph->ihl * 4));
-    const std::ptrdiff_t headers_size = (iph->ihl * 4) + (tcph->doff * 4);
+    std::span<const char> const payload{std::next(packet.packet.data(), static_cast<std::ptrdiff_t>(packet.headers_len)), packet.packet.size() - packet.headers_len};
 
-    std::span<const char> const payload{std::next(packet.data(), headers_size), packet.size() - static_cast<std::size_t>(headers_size)};
-
-    const std::tuple conn_tuple{iph->saddr, tcph->source, iph->daddr, tcph->dest};
+    const std::tuple conn_tuple{packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port()};
 
     auto conn_iter = conns_.find(conn_tuple);
     if (conn_iter == conns_.end()) {

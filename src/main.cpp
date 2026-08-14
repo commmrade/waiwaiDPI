@@ -49,28 +49,22 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
 
     assert(attrs[NFQA_PAYLOAD]);
     const std::size_t packet_len = mnl_attr_get_payload_len(attrs[NFQA_PAYLOAD]);
-    std::span<const char> packet{static_cast<char*>(mnl_attr_get_payload(attrs[NFQA_PAYLOAD])), packet_len};
+    std::span<const char> const packet_buf{static_cast<char*>(mnl_attr_get_payload(attrs[NFQA_PAYLOAD])), packet_len};
 
-    const iphdr* ip = reinterpret_cast<const iphdr*>(packet.data());
-    // TODO: WHy only tcp??
-    const tcphdr* tcp = reinterpret_cast<const tcphdr*>(packet.data() + ip->ihl * 4);
+    Packet packet{packet_buf};
 
     std::array<char, INET_ADDRSTRLEN> ip_src{};
     std::array<char, INET_ADDRSTRLEN> ip_dst{};
-    inet_ntop(AF_INET, &ip->saddr, ip_src.data(), ip_src.size());
-    inet_ntop(AF_INET, &ip->daddr, ip_dst.data(), ip_dst.size());
+    inet_ntop(AF_INET, &packet.network_hdr->saddr, ip_src.data(), ip_src.size());
+    inet_ntop(AF_INET, &packet.network_hdr->daddr, ip_dst.data(), ip_dst.size());
 
     ctx->tracker->track(packet);
-    auto& conn = ctx->tracker->get_conn(ip->saddr, tcp->source, ip->daddr, tcp->dest);
+    auto& conn = ctx->tracker->get_conn(packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port());
 
     if (!conn.is_done()) {
         auto cfed_pkt = ctx->classifier->classify(packet);
-        if (cfed_pkt.payload_proto == L7Proto::HTTP) {
-        } else if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
-            if (std::strcmp(ip_dst.data(), "95.85.248.84") == 0) {
-                std::println("FULL TLS Client hello: {} == {}", conn.get_reasm_pos(), conn.get_reasm_total_size());
-                conn.set_done(true);
-            }
+        if (cfed_pkt.payload_proto != L7Proto::UNKNOWN && cfed_pkt.payload_proto != L7Proto::REASSEMBLING) {
+            conn.set_done(true);
         }
     }
 

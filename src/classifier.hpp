@@ -7,20 +7,15 @@
 
 #include <span>
 #include "protocol.hpp"
-
+#include "packet.hpp"
+#include <cstdint>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <stdexcept>
+#include <variant>
 
-
-struct Packet
-{
-    std::span<const char> packet; // Note: it is non-owning
-    std::span<const char> payload;
-    L7Proto payload_proto{L7Proto::UNKNOWN}; // TODO: make it an enum
-    // TODO: Payload proto specific information (as an optimization to avoid doing the same thing in Modifier component
-};
-
-enum class ParseResult
+enum class ParseResult : std::uint8_t
 {
     ERROR,
     REASSEMBLING,
@@ -33,13 +28,12 @@ class Classifier
 private:
     ConnTracker* tracker_{nullptr};
 
-    ParseResult try_http(const iphdr* iph, const tcphdr* tcph, std::span<const char> packet, std::span<const char> payload);
-    ParseResult try_tls_handshake(const iphdr* iph, const tcphdr* tcph, std::span<const char> packet, std::span<const char> payload);
-
-    L7Proto try_payload(std::span<const char> packet);
+    ParseResult try_http(const Packet& pkt);
+    ParseResult try_tls_handshake(const Packet& pkt);
+    L7Proto try_payload(const Packet& pkt);
 public:
     explicit Classifier(ConnTracker* tracker) : tracker_(tracker) {}
-    Packet classify(std::span<const char> packet);
+    Packet classify(Packet& pkt);
 };
 
 #endif// WAIWAIDPI_CLASSIFIER_HPP
