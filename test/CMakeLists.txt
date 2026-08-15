@@ -48,6 +48,8 @@ add_executable(tests
         ../src/classifier.cpp
         ../src/conn_tracker.cpp
         ../src/packet_view.cpp
+        ../src/classifiers/http_classifier.cpp
+        ../src/classifiers/tls_classifier.cpp
 )
 target_link_libraries(
   tests

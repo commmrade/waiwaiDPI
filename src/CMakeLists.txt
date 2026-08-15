@@ -12,7 +12,12 @@ add_executable(main main.cpp
         protocol.hpp
         consts.hpp
         packet_view.hpp
-        packet_view.cpp)
+        packet_view.cpp
+        classifiers/http_classifier.cpp
+        classifiers/http_classifier.hpp
+        classifiers/payload_classifier.hpp
+        classifiers/tls_classifier.cpp
+        classifiers/tls_classifier.hpp)
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
 target_link_libraries(

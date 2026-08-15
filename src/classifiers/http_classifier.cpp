@@ -1,0 +1,74 @@
+//
+// Created by klewy on 8/15/26.
+//
+
+#include "http_classifier.hpp"
+
+#include <netinet/in.h>
+#include "../packet_view.hpp"
+#include "../conn_tracker.hpp"
+#include "../consts.hpp"
+
+ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker)
+{
+    auto &conn =
+        tracker->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
+    if (conn.payload_proto() == L7Proto::HTTP
+        && conn.get_reasm_pos() > 0 /* && conn.tcp_next_expected == tcph->seq */) {
+        conn.add_reasm_frag(pkt.packet);
+        conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
+
+        if (pkt.transport_proto == IPPROTO_TCP) {
+            const auto *tcph = std::get<const tcphdr *>(pkt.transport_hdr);
+            conn.set_reasm_expected_seq(static_cast<std::uint32_t>(ntohl(tcph->seq) + pkt.payload.size()));
+        }
+
+        if (conn.get_reasm_pos() >= conn.get_reasm_total_size()) {
+            // Drop conn? or it is fine
+            return ParseResult::ERROR;
+        }
+
+        std::string full_http;
+        full_http.reserve(conn.get_reasm_pos());
+        for (const auto &frag : conn.get_reasm_frags()) {
+            const PacketView pkt_frag = parse_packet(frag);
+            full_http.insert(
+                full_http.end(), frag.begin() + static_cast<std::ptrdiff_t>(pkt_frag.headers_len), frag.end());
+        }
+
+        if (full_http.contains("\r\n\r\n")) { return ParseResult::SUCCESS; }
+
+        return ParseResult::REASSEMBLING;
+    }
+
+    std::string_view payload_str{ pkt.payload };
+    // First, try to find \r\n (the status line)
+    const auto crln_pos = payload_str.find("\r\n");
+    if (crln_pos == std::string_view::npos) { return ParseResult::ERROR; }
+
+    payload_str = payload_str.substr(0, crln_pos);
+
+    // Now, try to search for "HTTP/"
+    const auto http_pos = payload_str.find("HTTP/");
+    if (http_pos == std::string_view::npos) {
+        return ParseResult::ERROR;// HTTP string not found => not HTTP
+    }
+
+    std::string_view const full_req{ pkt.payload };
+    const auto header_end_pos = full_req.find("\r\n\r\n");
+    if (header_end_pos == std::string_view::npos) {
+        conn.add_reasm_frag(pkt.packet);
+        conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
+
+        if (pkt.transport_proto == IPPROTO_TCP) {
+            const auto *tcph = std::get<const tcphdr *>(pkt.transport_hdr);
+            conn.set_reasm_expected_seq(static_cast<std::uint32_t>(ntohl(tcph->seq) + pkt.payload.size()));
+        }
+        conn.set_reasm_total_size(HTTP_PARSE_LIMIT);
+        conn.set_payload_proto(L7Proto::HTTP);
+
+        return ParseResult::REASSEMBLING;
+    }
+
+    return ParseResult::SUCCESS;
+}
