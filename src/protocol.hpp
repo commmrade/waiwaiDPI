@@ -8,7 +8,8 @@
 enum class L7Proto
 {
     UNKNOWN, // Unknown payload, but packets may be modified
-    REASSEMBLING, // In this case payload isn't assembled and packets should be held, packets can't be modified
+    EMPTY,
+    // REASSEMBLING, // In this case payload isn't assembled and packets should be held, packets can't be modified
     HTTP,
     TLS_HANDSHAKE,
 };

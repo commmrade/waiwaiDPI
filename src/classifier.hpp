@@ -8,6 +8,7 @@
 #include "packet_view.hpp"
 #include "protocol.hpp"
 #include <cstdint>
+#include <expected>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
@@ -30,10 +31,10 @@ private:
 
     ParseResult try_http(const PacketView& pkt);
     ParseResult try_tls_handshake(const PacketView& pkt);
-    L7Proto try_payload(const PacketView& pkt);
+    std::expected<L7Proto, ParseResult> try_payload(const PacketView& pkt);
 public:
     explicit Classifier(ConnTracker* tracker) : tracker_(tracker) {}
-    PacketView classify(PacketView& pkt);
+    std::expected<PacketView, ParseResult> classify(PacketView& pkt);
 };
 
 #endif// WAIWAIDPI_CLASSIFIER_HPP

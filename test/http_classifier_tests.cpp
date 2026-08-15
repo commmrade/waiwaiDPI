@@ -20,7 +20,7 @@ TEST_CASE("Full HTTP is classified correctly", "[http_classifier]")
     PacketView pkt = parse_packet(packet);
 
     tracker.track(pkt);
-    auto cfed_pkt = classifier.classify(pkt);
+    auto cfed_pkt = classifier.classify(pkt).value();
     REQUIRE(cfed_pkt.payload_proto == L7Proto::HTTP);
 }
 
@@ -70,13 +70,13 @@ TEST_CASE("Split HTTP is classified correctly", "[http_classifier]")
 
     tracker.track(first_pkt);
 
-    auto cfed_pkt = classifier.classify(first_pkt);
-    REQUIRE(cfed_pkt.payload_proto == L7Proto::REASSEMBLING);
+    auto cfed_pkt = classifier.classify(first_pkt).error();
+    REQUIRE(cfed_pkt == ParseResult::REASSEMBLING);
 
     tracker.track(second_pkt);
 
-    cfed_pkt = classifier.classify(second_pkt);
-    REQUIRE(cfed_pkt.payload_proto == L7Proto::HTTP);
+    auto cfed_pkt2 = classifier.classify(second_pkt).value();
+    REQUIRE(cfed_pkt2.payload_proto == L7Proto::HTTP);
 }
 
 TEST_CASE("Split HTTP at headers end", "[http_classifier]")
@@ -125,11 +125,11 @@ TEST_CASE("Split HTTP at headers end", "[http_classifier]")
 
     tracker.track(first_pkt);
 
-    auto cfed_pkt = classifier.classify(first_pkt);
-    REQUIRE(cfed_pkt.payload_proto == L7Proto::REASSEMBLING);
+    auto cfed_pkt = classifier.classify(first_pkt).error();
+    REQUIRE(cfed_pkt == ParseResult::REASSEMBLING);
 
     tracker.track(second_pkt);
 
-    cfed_pkt = classifier.classify(second_pkt);
-    REQUIRE(cfed_pkt.payload_proto == L7Proto::HTTP);
+    auto cfed_pkt2 = classifier.classify(second_pkt).value();
+    REQUIRE(cfed_pkt2.payload_proto == L7Proto::HTTP);
 }

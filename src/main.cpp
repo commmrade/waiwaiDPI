@@ -62,8 +62,9 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     auto& conn = ctx->tracker->get_conn(packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port());
 
     if (!conn.is_done()) {
-        auto cfed_pkt = ctx->classifier->classify(packet);
-        if (cfed_pkt.payload_proto != L7Proto::UNKNOWN && cfed_pkt.payload_proto != L7Proto::REASSEMBLING) {
+        auto cfed_pkt_res= ctx->classifier->classify(packet);
+        if (cfed_pkt_res.has_value()) {
+            auto& cfed_pkt = cfed_pkt_res.value();
             conn.set_done(true);
         }
     }
