@@ -11,7 +11,8 @@ add_executable(main main.cpp
         conn_tracker.cpp
         protocol.hpp
         consts.hpp
-        packet.hpp)
+        packet_view.hpp
+        packet_view.cpp)
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
 target_link_libraries(

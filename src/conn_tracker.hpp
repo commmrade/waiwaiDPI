@@ -4,12 +4,12 @@
 
 #ifndef WAIWAIDPI_CONN_TRACKER_HPP
 #define WAIWAIDPI_CONN_TRACKER_HPP
+#include "packet_view.hpp"
+#include "protocol.hpp"
+#include <chrono>
 #include <cstdint>
 #include <map>
 #include <span>
-#include "protocol.hpp"
-#include "packet.hpp"
-#include <chrono>
 #include <vector>
 
 class Connection
@@ -118,7 +118,7 @@ class ConnTracker
 private:
     std::map<std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t>, Connection> conns_;
 public:
-    void track(const Packet& packet);
+    void track(const PacketView& packet);
     Connection& get_conn(const std::uint32_t saddr, const std::uint16_t source, const std::uint32_t daddr, const std::uint16_t dest);
     [[nodiscard]] std::size_t conns_size() const
     {

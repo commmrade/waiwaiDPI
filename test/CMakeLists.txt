@@ -47,6 +47,7 @@ add_executable(tests
         common.hpp
         ../src/classifier.cpp
         ../src/conn_tracker.cpp
+        ../src/packet_view.cpp
 )
 target_link_libraries(
   tests

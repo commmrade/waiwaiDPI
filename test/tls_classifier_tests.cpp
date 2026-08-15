@@ -17,7 +17,7 @@ TEST_CASE("Full TLS is classified correctly", "[tls_classifier]")
     ctx.classifier = &classifier;
     ctx.tracker = &tracker;
 
-    Packet pkt{packet};
+    PacketView pkt = parse_packet(packet);
     tracker.track(pkt);
     auto cfed_pkt = classifier.classify(pkt);
     REQUIRE(cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE);
@@ -64,8 +64,8 @@ TEST_CASE("Split TLS is classified correctly", "[tls_classifier]")
 
     std::vector<char> second_packet = construct_packet_from(second_fragment_payload, ip, tcp_second);
 
-    Packet first_pkt{first_packet};
-    Packet second_pkt{second_packet};
+    PacketView first_pkt = parse_packet(first_packet);
+    PacketView second_pkt = parse_packet(second_packet);
 
     tracker.track(first_pkt);
 

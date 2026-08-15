@@ -8,10 +8,8 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 
-void ConnTracker::track(const Packet& packet)
+void ConnTracker::track(const PacketView& packet)
 {
-    std::span<const char> const payload{std::next(packet.packet.data(), static_cast<std::ptrdiff_t>(packet.headers_len)), packet.packet.size() - packet.headers_len};
-
     const std::tuple conn_tuple{packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port()};
 
     auto conn_iter = conns_.find(conn_tuple);
@@ -22,7 +20,7 @@ void ConnTracker::track(const Packet& packet)
     }
 
     conn_iter->second.update_last_packet_time();
-    conn_iter->second.set_bytes_transfered(conn_iter->second.bytes_transfered() + payload.size());
+    conn_iter->second.set_bytes_transfered(conn_iter->second.bytes_transfered() + packet.payload.size());
     conn_iter->second.count_packet();
 }
 Connection &ConnTracker::get_conn(const std::uint32_t saddr,

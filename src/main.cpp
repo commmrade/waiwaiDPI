@@ -51,7 +51,7 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     const std::size_t packet_len = mnl_attr_get_payload_len(attrs[NFQA_PAYLOAD]);
     std::span<const char> const packet_buf{static_cast<char*>(mnl_attr_get_payload(attrs[NFQA_PAYLOAD])), packet_len};
 
-    Packet packet{packet_buf};
+    auto packet = parse_packet(packet_buf);
 
     std::array<char, INET_ADDRSTRLEN> ip_src{};
     std::array<char, INET_ADDRSTRLEN> ip_dst{};

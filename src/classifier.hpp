@@ -5,13 +5,13 @@
 #ifndef WAIWAIDPI_CLASSIFIER_HPP
 #define WAIWAIDPI_CLASSIFIER_HPP
 
-#include <span>
+#include "packet_view.hpp"
 #include "protocol.hpp"
-#include "packet.hpp"
 #include <cstdint>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include <span>
 #include <stdexcept>
 #include <variant>
 
@@ -28,12 +28,12 @@ class Classifier
 private:
     ConnTracker* tracker_{nullptr};
 
-    ParseResult try_http(const Packet& pkt);
-    ParseResult try_tls_handshake(const Packet& pkt);
-    L7Proto try_payload(const Packet& pkt);
+    ParseResult try_http(const PacketView& pkt);
+    ParseResult try_tls_handshake(const PacketView& pkt);
+    L7Proto try_payload(const PacketView& pkt);
 public:
     explicit Classifier(ConnTracker* tracker) : tracker_(tracker) {}
-    Packet classify(Packet& pkt);
+    PacketView classify(PacketView& pkt);
 };
 
 #endif// WAIWAIDPI_CLASSIFIER_HPP

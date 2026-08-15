@@ -17,7 +17,7 @@ TEST_CASE("Full HTTP is classified correctly", "[http_classifier]")
     ctx.tracker = &tracker;
 
     std::span<const char> packet{reinterpret_cast<const char*>(full_http_req), static_cast<size_t>(sizeof(full_http_req))};
-    Packet pkt{packet};
+    PacketView pkt = parse_packet(packet);
 
     tracker.track(pkt);
     auto cfed_pkt = classifier.classify(pkt);
@@ -65,8 +65,8 @@ TEST_CASE("Split HTTP is classified correctly", "[http_classifier]")
 
     std::vector<char> second_packet = construct_packet_from(second_fragment_payload, ip, tcp_second);
 
-    Packet first_pkt{first_packet};
-    Packet second_pkt{second_packet};
+    auto first_pkt = parse_packet(first_packet);
+    PacketView second_pkt = parse_packet(second_packet);
 
     tracker.track(first_pkt);
 
@@ -120,8 +120,8 @@ TEST_CASE("Split HTTP at headers end", "[http_classifier]")
 
     std::vector<char> second_packet = construct_packet_from(second_fragment_payload, ip, tcp_second);
 
-    Packet first_pkt{first_packet};
-    Packet second_pkt{second_packet};
+    PacketView first_pkt = parse_packet(first_packet);
+    PacketView second_pkt = parse_packet(second_packet);
 
     tracker.track(first_pkt);
 

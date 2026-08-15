@@ -15,7 +15,7 @@
 #include <print>
 #include <string_view>
 
-ParseResult Classifier::try_http(const Packet& pkt)
+ParseResult Classifier::try_http(const PacketView& pkt)
 {
     auto& conn = tracker_->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
     if (conn.payload_proto() == L7Proto::HTTP && conn.get_reasm_pos() > 0 /* && conn.tcp_next_expected == tcph->seq */) {
@@ -35,7 +35,7 @@ ParseResult Classifier::try_http(const Packet& pkt)
         std::string full_http;
         full_http.reserve(conn.get_reasm_pos());
         for (const auto& frag : conn.get_reasm_frags()) {
-            const Packet pkt_frag{frag};
+            const PacketView pkt_frag = parse_packet(frag);
             full_http.insert(full_http.end(), frag.begin() + static_cast<std::ptrdiff_t>(pkt_frag.headers_len), frag.end());
         }
 
@@ -81,7 +81,7 @@ ParseResult Classifier::try_http(const Packet& pkt)
 }
 
 
-ParseResult Classifier::try_tls_handshake(const Packet& pkt)
+ParseResult Classifier::try_tls_handshake(const PacketView& pkt)
 {
     auto& conn = tracker_->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
     if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE && conn.get_reasm_pos() > 0 /* && conn.tcp_next_expected == tcph->seq */) {
@@ -129,7 +129,7 @@ ParseResult Classifier::try_tls_handshake(const Packet& pkt)
 
     return ParseResult::SUCCESS;
 }
-L7Proto Classifier::try_payload(const Packet& pkt)
+L7Proto Classifier::try_payload(const PacketView& pkt)
 {
     assert(!pkt.payload.empty()); //NOLINT
 
@@ -160,7 +160,7 @@ L7Proto Classifier::try_payload(const Packet& pkt)
     return L7Proto::UNKNOWN;
 }
 
-Packet Classifier::classify(Packet& pkt)
+PacketView Classifier::classify(PacketView& pkt)
 {
     if (pkt.payload.empty()) {
         return pkt;
