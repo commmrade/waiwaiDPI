@@ -40,6 +40,19 @@ std::uint16_t PacketView::get_dest_port() const
     }
     }
 }
+std::uint32_t PacketView::get_seq() const
+{
+    switch (transport_proto) {
+    case IPPROTO_TCP: {
+        const auto *tcph = std::get<const tcphdr *>(transport_hdr);
+        return ntohl(tcph->seq);
+        break;
+    }
+    default: {
+        return 0;
+    }
+    }
+}
 
 PacketView parse_packet(std::span<const char> packet)
 {

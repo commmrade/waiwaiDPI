@@ -32,6 +32,7 @@ struct PacketView
 
     [[nodiscard]] std::uint16_t get_source_port() const;
     [[nodiscard]] std::uint16_t get_dest_port() const;
+    [[nodiscard]] std::uint32_t get_seq() const;
 };
 
 [[nodiscard]] PacketView parse_packet(std::span<const char> packet);

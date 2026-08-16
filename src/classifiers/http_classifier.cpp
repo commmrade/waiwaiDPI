@@ -14,7 +14,7 @@ ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker
     auto &conn =
         tracker->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
     if (conn.payload_proto() == L7Proto::HTTP
-        && conn.get_reasm_pos() > 0 /* && conn.tcp_next_expected == tcph->seq */) {
+        && conn.get_reasm_pos() > 0 && (pkt.get_seq() == 0 || pkt.get_seq() == conn.get_reasm_expected_seq())) {
         conn.add_reasm_frag(pkt.packet);
         conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
 
