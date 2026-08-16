@@ -20,8 +20,10 @@ TEST_CASE("Full HTTP is classified correctly", "[http_classifier]")
     PacketView pkt = parse_packet(packet);
 
     tracker.track(pkt);
-    auto cfed_pkt = classifier.classify(pkt).value();
-    REQUIRE(cfed_pkt.payload_proto == L7Proto::HTTP);
+    auto res = classifier.classify(pkt);
+    REQUIRE(res == ParseResult::SUCCESS);
+    REQUIRE(pkt.payload_proto == L7Proto::HTTP);
+    REQUIRE(pkt.is_payload_reasm == false);
 }
 
 TEST_CASE("Split HTTP is classified correctly", "[http_classifier]")
@@ -70,13 +72,16 @@ TEST_CASE("Split HTTP is classified correctly", "[http_classifier]")
 
     tracker.track(first_pkt);
 
-    auto cfed_pkt = classifier.classify(first_pkt).error();
-    REQUIRE(cfed_pkt == ParseResult::REASSEMBLING);
+    auto res = classifier.classify(first_pkt);
+    REQUIRE(res == ParseResult::REASSEMBLING);
+    REQUIRE(first_pkt.is_payload_reasm == true);
 
     tracker.track(second_pkt);
 
-    auto cfed_pkt2 = classifier.classify(second_pkt).value();
-    REQUIRE(cfed_pkt2.payload_proto == L7Proto::HTTP);
+    res = classifier.classify(second_pkt);
+    REQUIRE(res == ParseResult::SUCCESS);
+    REQUIRE(second_pkt.payload_proto == L7Proto::HTTP);
+    REQUIRE(second_pkt.is_payload_reasm == true);
 }
 
 TEST_CASE("Split HTTP at headers end", "[http_classifier]")
@@ -125,11 +130,13 @@ TEST_CASE("Split HTTP at headers end", "[http_classifier]")
 
     tracker.track(first_pkt);
 
-    auto cfed_pkt = classifier.classify(first_pkt).error();
-    REQUIRE(cfed_pkt == ParseResult::REASSEMBLING);
+    auto res = classifier.classify(first_pkt);
+    REQUIRE(res == ParseResult::REASSEMBLING);
+    REQUIRE(first_pkt.is_payload_reasm == true);
 
     tracker.track(second_pkt);
-
-    auto cfed_pkt2 = classifier.classify(second_pkt).value();
-    REQUIRE(cfed_pkt2.payload_proto == L7Proto::HTTP);
+    res = classifier.classify(second_pkt);
+    REQUIRE(res == ParseResult::SUCCESS);
+    REQUIRE(second_pkt.is_payload_reasm == true);
+    REQUIRE(second_pkt.payload_proto == L7Proto::HTTP);
 }

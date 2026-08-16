@@ -36,7 +36,9 @@ ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker
                 full_http.end(), frag.begin() + static_cast<std::ptrdiff_t>(pkt_frag.headers_len), frag.end());
         }
 
-        if (full_http.contains("\r\n\r\n")) { return ParseResult::SUCCESS; }
+        if (full_http.contains("\r\n\r\n")) {
+            return ParseResult::SUCCESS_REASSEMBLED;
+        }
 
         return ParseResult::REASSEMBLING;
     }

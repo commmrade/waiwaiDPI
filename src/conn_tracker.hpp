@@ -34,6 +34,14 @@ private:
 public:
     bool is_reassembling() const { return reasm_.pos > 0 || reasm_.total_size > 0; }
 
+    void reset_reasm()
+    {
+        reasm_.frags.clear();
+        reasm_.pos = 0;
+        reasm_.total_size = 0;
+        reasm_.expected_seq = 0;
+    }
+
     void add_reasm_frag(std::span<const char> frag)
     {
         reasm_.frags.emplace_back(frag.begin(), frag.end());

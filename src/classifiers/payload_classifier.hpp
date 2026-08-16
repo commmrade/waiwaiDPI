@@ -14,6 +14,7 @@ enum class ParseResult : std::uint8_t
 {
     ERROR,
     REASSEMBLING,
+    SUCCESS_REASSEMBLED,
     SUCCESS
 };
 

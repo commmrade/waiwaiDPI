@@ -62,10 +62,29 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     auto& conn = ctx->tracker->get_conn(packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port());
 
     if (!conn.is_done()) {
-        auto cfed_pkt_res= ctx->classifier->classify(packet);
-        if (cfed_pkt_res.has_value()) {
-            auto& cfed_pkt = cfed_pkt_res.value();
-            conn.set_done(true);
+        auto res= ctx->classifier->classify(packet);
+        if (res == ParseResult::SUCCESS) {
+            auto& cfed_pkt = packet;
+            if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
+                std::println("Got a tls handshake");
+                conn.set_done(true);
+            } else if (cfed_pkt.payload_proto == L7Proto::HTTP) {
+                if (cfed_pkt.is_payload_reasm) {
+                    const auto frags = conn.get_reasm_frags();
+                    conn.reset_reasm();
+
+                    std::string http_req{};
+
+                    for (const auto& frag : frags) {
+                        const PacketView http_pkt = parse_packet(frag);
+                        http_req.insert(http_req.end(), http_pkt.payload.begin(), http_pkt.payload.end());
+                    }
+
+                    std::println("Reassembled http request from {} frags: {}", frags.size(), std::string_view{http_req});
+                } else {
+                    std::println("full http request: {}", std::string_view{cfed_pkt.payload});
+                }
+            }
         }
     }
 

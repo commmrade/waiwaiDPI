@@ -28,7 +28,7 @@ private:
     ConnTracker* tracker_{nullptr};
     std::vector<std::unique_ptr<PayloadClassifier>> classifiers_;
 
-    std::expected<L7Proto, ParseResult> try_payload(const PacketView& pkt);
+    std::expected<L7Proto, ParseResult> try_payload(PacketView& pkt);
 public:
     explicit Classifier(ConnTracker* tracker) : tracker_(tracker)
     {
@@ -36,7 +36,7 @@ public:
         classifiers_.push_back(std::make_unique<TlsHandshakeClassifier>());
     }
 
-    std::expected<PacketView, ParseResult> classify(PacketView& pkt);
+    ParseResult classify(PacketView& pkt);
 };
 
 #endif// WAIWAIDPI_CLASSIFIER_HPP

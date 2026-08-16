@@ -23,7 +23,7 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker 
         }
 
         if (conn.get_reasm_pos() == conn.get_reasm_total_size()) {
-            return ParseResult::SUCCESS;// we got the whole TLS client hello, hooray
+            return ParseResult::SUCCESS_REASSEMBLED;// we got the whole TLS client hello, hooray
         }
 
         return ParseResult::REASSEMBLING;

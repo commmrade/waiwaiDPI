@@ -19,8 +19,10 @@ TEST_CASE("Full TLS is classified correctly", "[tls_classifier]")
 
     PacketView pkt = parse_packet(packet);
     tracker.track(pkt);
-    auto cfed_pkt = classifier.classify(pkt).value();
-    REQUIRE(cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE);
+    auto res = classifier.classify(pkt);
+    REQUIRE(res == ParseResult::SUCCESS);
+    REQUIRE(pkt.is_payload_reasm == false);
+    REQUIRE(pkt.payload_proto == L7Proto::TLS_HANDSHAKE);
 }
 
 TEST_CASE("Split TLS is classified correctly", "[tls_classifier]")
@@ -69,11 +71,14 @@ TEST_CASE("Split TLS is classified correctly", "[tls_classifier]")
 
     tracker.track(first_pkt);
 
-    auto cfed_pkt = classifier.classify(first_pkt).error();
-    REQUIRE(cfed_pkt == ParseResult::REASSEMBLING);
+    auto res = classifier.classify(first_pkt);
+    REQUIRE(res == ParseResult::REASSEMBLING);
+    REQUIRE(first_pkt.is_payload_reasm == true);
 
     tracker.track(second_pkt);
 
-    auto cfed_pkt2 = classifier.classify(second_pkt).value();
-    REQUIRE(cfed_pkt2.payload_proto == L7Proto::TLS_HANDSHAKE);
+    res = classifier.classify(second_pkt);
+    REQUIRE(res == ParseResult::SUCCESS);
+    REQUIRE(second_pkt.payload_proto == L7Proto::TLS_HANDSHAKE);
+    REQUIRE(second_pkt.is_payload_reasm == true);
 }
