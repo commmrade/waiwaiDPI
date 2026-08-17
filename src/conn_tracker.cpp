@@ -96,7 +96,7 @@ void ConnTracker::clear_dead_connections()
     const auto now = std::chrono::system_clock::now();
     while (iter != conns_.end()) {
         const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - iter->second.get_last_packet_time());
-        if (dur.count() >= DEAD_CONNECTION_TIMEOUT_SECS) {
+        if (dur.count() >= DEAD_CONNECTION_TIMEOUT_SECS) { // TODO: determine timeout based on tcp conn state, if not tcp, then some default value
             iter = conns_.erase(iter);
         } else {
             ++iter;
