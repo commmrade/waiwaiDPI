@@ -19,7 +19,9 @@ ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
     conn.add_reasm_frag(pkt.packet);
     conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
 
-    conn.set_reasm_expected_seq(pkt.get_seq() + static_cast<std::uint32_t>(pkt.payload.size()));
+    if (auto seq_opt = pkt.get_seq(); seq_opt.has_value()) {
+        conn.set_reasm_expected_seq(seq_opt.value() + static_cast<std::uint32_t>(pkt.payload.size()));
+    }
 
     if (!conn.get_reasm_frags().empty()) { // if not the first fragment
         if (conn.get_reasm_pos() >= conn.get_reasm_total_size()) {
@@ -47,7 +49,7 @@ ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker
     auto &conn =
         tracker->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
     if (conn.payload_proto() == L7Proto::HTTP
-        && conn.get_reasm_pos() > 0 && (pkt.get_seq() == 0 || pkt.get_seq() == conn.get_reasm_expected_seq())) {
+        && conn.get_reasm_pos() > 0 && (pkt.get_seq() == conn.get_reasm_expected_seq())) {
         return buffer_pkt(conn, pkt);
     }
 

@@ -40,7 +40,7 @@ std::uint16_t PacketView::get_dest_port() const
     }
     }
 }
-std::uint32_t PacketView::get_seq() const
+std::optional<std::uint32_t> PacketView::get_seq() const
 {
     switch (transport_proto) {
     case IPPROTO_TCP: {
@@ -49,7 +49,7 @@ std::uint32_t PacketView::get_seq() const
         break;
     }
     default: {
-        return 0;
+        return std::nullopt;
     }
     }
 }

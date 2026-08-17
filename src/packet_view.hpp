@@ -12,6 +12,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <variant>
@@ -34,7 +35,7 @@ struct PacketView
 
     [[nodiscard]] std::uint16_t get_source_port() const;
     [[nodiscard]] std::uint16_t get_dest_port() const;
-    [[nodiscard]] std::uint32_t get_seq() const;
+    [[nodiscard]] std::optional<std::uint32_t> get_seq() const;
 };
 
 [[nodiscard]] PacketView parse_packet(std::span<const char> packet);

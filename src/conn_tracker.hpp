@@ -48,7 +48,7 @@ private:
         std::vector<std::vector<char>> frags;
         std::size_t pos{0};
         std::size_t total_size{0};
-        std::uint32_t expected_seq{0}; // for L7 kinda
+        std::optional<std::uint32_t> expected_seq{0};
     } reasm_;
 
     int l4_proto_{};
@@ -121,7 +121,7 @@ public:
     {
         reasm_.total_size = total_size;
     }
-    [[nodiscard]] std::uint32_t get_reasm_expected_seq() const
+    [[nodiscard]] std::optional<std::uint32_t> get_reasm_expected_seq() const
     {
         return reasm_.expected_seq;
     }
