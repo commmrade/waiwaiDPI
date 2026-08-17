@@ -63,6 +63,10 @@ int ConnTracker::timeout_for_tcp_state(const Connection::Tcp::TcpState state)
         return FIN_TCP_CONNECTION_TIMEOUT_SECS;
         break;
     }
+    case Connection::Tcp::TcpState::CLOSED: {
+        return CLOSE_TCP_CONNECTION_TIMEOUT_SECS;
+        break;
+    }
     default:
         return DEFAULT_CONNECTION_TIMEOUT_SECS;
     }
@@ -126,7 +130,7 @@ void ConnTracker::clear_dead_connections()
         const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - iter->second.get_last_packet_time());
 
         auto timeout = calculate_timeout(iter->second);
-        if (dur.count() >= timeout) { // TODO: determine timeout based on tcp conn state, if not tcp, then some default value
+        if (dur.count() >= timeout) {
             iter = conns_.erase(iter);
         } else {
             ++iter;
