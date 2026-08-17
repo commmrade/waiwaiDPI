@@ -4,11 +4,11 @@
 
 #ifndef WAIWAIDPI_NFQ_HPP
 #define WAIWAIDPI_NFQ_HPP
-#include <libmnl/libmnl.h>
 #include <cstdint>
+#include <libmnl/libmnl.h>
 
 constexpr int QUEUE_NUMBER = 1488;
 
-int send_verdict(mnl_socket* sock, const std::uint32_t packet_id, int verd);
+int send_verdict(mnl_socket *sock, const std::uint32_t packet_id, int verd);
 
 #endif// WAIWAIDPI_NFQ_HPP

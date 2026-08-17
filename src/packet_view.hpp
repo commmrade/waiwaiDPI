@@ -20,15 +20,17 @@
 struct PacketView
 {
     std::span<const char> packet;
-    std::size_t headers_len{0};
+    std::size_t headers_len{ 0 };
     std::span<const char> payload;
 
-    const iphdr* network_hdr{nullptr};
+    const iphdr *network_hdr{ nullptr };
     int transport_proto{};
     std::variant<const tcphdr *, const udphdr *> transport_hdr;
 
-    L7Proto payload_proto{L7Proto::UNKNOWN};
-    bool is_payload_reasm{false}; // that means payload is incomplete, complete payload is fragmented inside Connection class
+    L7Proto payload_proto{ L7Proto::UNKNOWN };
+    bool is_payload_reasm{
+        false
+    };// that means payload is incomplete, complete payload is fragmented inside Connection class
 
     [[nodiscard]] std::uint16_t get_source_port() const;
     [[nodiscard]] std::uint16_t get_dest_port() const;

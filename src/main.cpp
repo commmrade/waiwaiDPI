@@ -2,6 +2,7 @@
 #include "conn_tracker.hpp"
 
 
+#include "consts.hpp"
 #include "nfq.hpp"
 #include <arpa/inet.h>
 #include <cassert>
@@ -16,24 +17,23 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <print>
-#include "consts.hpp"
 
 struct Context
 {
-    mnl_socket* sock{nullptr};
-    Classifier* classifier{nullptr};
+    mnl_socket *sock{ nullptr };
+    Classifier *classifier{ nullptr };
 
-    ConnTracker* tracker{nullptr};
+    ConnTracker *tracker{ nullptr };
 };
 
-int cb_loop(const struct nlmsghdr* nlh, void* data)
+int cb_loop(const struct nlmsghdr *nlh, void *data)
 {
-    Context* ctx = static_cast<Context*>(data);
+    Context *ctx = static_cast<Context *>(data);
 
-    const nfgenmsg* genmsg = static_cast<nfgenmsg*>(mnl_nlmsg_get_payload(nlh));
+    const nfgenmsg *genmsg = static_cast<nfgenmsg *>(mnl_nlmsg_get_payload(nlh));
     assert(genmsg);
 
-    std::array<nlattr*, NFQA_MAX + 1> attrs{};
+    std::array<nlattr *, NFQA_MAX + 1> attrs{};
     int ret = nfq_nlmsg_parse(nlh, attrs.data());
     if (ret < 0) {
         perror("nfq_nlmsg_parse");
@@ -41,7 +41,8 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     }
 
     assert(attrs[NFQA_PACKET_HDR]);
-    const nfqnl_msg_packet_hdr* pkt_hdr = static_cast<const nfqnl_msg_packet_hdr*>(mnl_attr_get_payload(attrs[NFQA_PACKET_HDR]));
+    const nfqnl_msg_packet_hdr *pkt_hdr =
+        static_cast<const nfqnl_msg_packet_hdr *>(mnl_attr_get_payload(attrs[NFQA_PACKET_HDR]));
     if (!pkt_hdr) {
         std::println(std::cerr, "No packet header");
         return MNL_CB_ERROR;
@@ -49,7 +50,8 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
 
     assert(attrs[NFQA_PAYLOAD]);
     const std::size_t packet_len = mnl_attr_get_payload_len(attrs[NFQA_PAYLOAD]);
-    std::span<const char> const packet_buf{static_cast<char*>(mnl_attr_get_payload(attrs[NFQA_PAYLOAD])), packet_len};
+    std::span<const char> const packet_buf{ static_cast<char *>(mnl_attr_get_payload(attrs[NFQA_PAYLOAD])),
+        packet_len };
 
     auto packet = parse_packet(packet_buf);
 
@@ -59,12 +61,13 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
     inet_ntop(AF_INET, &packet.network_hdr->daddr, ip_dst.data(), ip_dst.size());
 
     ctx->tracker->track(packet);
-    auto& conn = ctx->tracker->get_conn(packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port());
+    auto &conn = ctx->tracker->get_conn(
+        packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port());
 
     if (!conn.is_done()) {
-        auto res= ctx->classifier->classify(packet);
+        auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
-            auto& cfed_pkt = packet;
+            auto &cfed_pkt = packet;
             if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
                 std::println("Got a tls handshake");
                 conn.set_done(true);
@@ -75,14 +78,15 @@ int cb_loop(const struct nlmsghdr* nlh, void* data)
 
                     std::string http_req{};
 
-                    for (const auto& frag : frags) {
+                    for (const auto &frag : frags) {
                         const PacketView http_pkt = parse_packet(frag);
                         http_req.insert(http_req.end(), http_pkt.payload.begin(), http_pkt.payload.end());
                     }
 
-                    std::println("Reassembled http request from {} frags: {}", frags.size(), std::string_view{http_req});
+                    std::println(
+                        "Reassembled http request from {} frags: {}", frags.size(), std::string_view{ http_req });
                 } else {
-                    std::println("full http request: {}", std::string_view{cfed_pkt.payload});
+                    std::println("full http request: {}", std::string_view{ cfed_pkt.payload });
                 }
             }
         }
@@ -101,7 +105,7 @@ int main(int argc, char *argv[])
 {
     int ret = 0;
 
-    mnl_socket* socket = mnl_socket_open(NETLINK_NETFILTER);
+    mnl_socket *socket = mnl_socket_open(NETLINK_NETFILTER);
     if (!socket) {
         perror("mnl socket open failed");
         return EXIT_FAILURE;
@@ -119,7 +123,7 @@ int main(int argc, char *argv[])
     std::array<char, BUF_SIZE> buf{};
 
     // bind
-    nlmsghdr* hdr = nfq_nlmsg_put(buf.data(), NFQNL_MSG_CONFIG, QUEUE_NUMBER);
+    nlmsghdr *hdr = nfq_nlmsg_put(buf.data(), NFQNL_MSG_CONFIG, QUEUE_NUMBER);
     nfq_nlmsg_cfg_put_cmd(hdr, AF_INET, NFQNL_CFG_CMD_BIND);
     ssize_t sent = mnl_socket_sendto(socket, hdr, hdr->nlmsg_len);
     if (sent < 0) {
@@ -142,7 +146,7 @@ int main(int argc, char *argv[])
 
 
     ConnTracker tracker{};
-    Classifier cfier{&tracker};
+    Classifier cfier{ &tracker };
 
     Context ctx{};
     ctx.sock = socket;
@@ -168,7 +172,7 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
 
-        ret = mnl_cb_run(buf.data(), static_cast<std::size_t>(rcvd), 0, port_id, cb_loop, static_cast<void*>(&ctx));
+        ret = mnl_cb_run(buf.data(), static_cast<std::size_t>(rcvd), 0, port_id, cb_loop, static_cast<void *>(&ctx));
         if (ret < 0) {
             perror("cb run");
             return EXIT_FAILURE;

@@ -16,29 +16,25 @@
 #include <string_view>
 
 
-
-
-
-
 std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
 {
     assert(!pkt.payload.empty());// NOLINT
 
-    for (const auto& classifier : classifiers_) {
+    for (const auto &classifier : classifiers_) {
         switch (classifier->classify(pkt, tracker_)) {
-            case ParseResult::SUCCESS: {
-                return { classifier->protocol() };
-            }
-            case ParseResult::SUCCESS_REASSEMBLED: {
-                pkt.is_payload_reasm = true;
-                return { classifier->protocol() };
-            }
-            case ParseResult::REASSEMBLING: {
-                pkt.is_payload_reasm = true;
-                return std::unexpected{ ParseResult::REASSEMBLING };
-            }
-            default: {
-            }
+        case ParseResult::SUCCESS: {
+            return { classifier->protocol() };
+        }
+        case ParseResult::SUCCESS_REASSEMBLED: {
+            pkt.is_payload_reasm = true;
+            return { classifier->protocol() };
+        }
+        case ParseResult::REASSEMBLING: {
+            pkt.is_payload_reasm = true;
+            return std::unexpected{ ParseResult::REASSEMBLING };
+        }
+        default: {
+        }
         }
     }
 
