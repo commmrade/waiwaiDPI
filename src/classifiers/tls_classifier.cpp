@@ -8,26 +8,35 @@
 
 #include <cstring>
 
+ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketView &pkt, std::optional<std::size_t> tls_len)
+{
+    if (conn.get_reasm_frags().empty() && tls_len.has_value()) {
+        conn.set_reasm_total_size(tls_len.value() + 5);
+        conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
+    }
+
+    conn.add_reasm_frag(pkt.packet);
+    conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
+
+    conn.set_reasm_expected_seq(pkt.get_seq() + static_cast<std::uint32_t>(pkt.payload.size()));
+
+    if (!conn.get_reasm_frags().empty()) {
+        if (conn.get_reasm_pos() == conn.get_reasm_total_size()) {
+            return ParseResult::SUCCESS_REASSEMBLED;// we got the whole TLS client hello, hooray
+        }
+    }
+
+    return ParseResult::REASSEMBLING;
+}
+
 ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker *tracker)
 {
     auto &conn =
        tracker->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
     if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE
         && conn.get_reasm_pos() > 0 && (pkt.get_seq() == 0 || pkt.get_seq() == conn.get_reasm_expected_seq())) {
-        conn.add_reasm_frag(pkt.packet);
-        conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
-
-        if (pkt.transport_proto == IPPROTO_TCP) {
-            const auto *tcph = std::get<const tcphdr *>(pkt.transport_hdr);
-            conn.set_reasm_expected_seq(static_cast<std::uint32_t>(ntohl(tcph->seq) + pkt.payload.size()));
-        }
-
-        if (conn.get_reasm_pos() == conn.get_reasm_total_size()) {
-            return ParseResult::SUCCESS_REASSEMBLED;// we got the whole TLS client hello, hooray
-        }
-
-        return ParseResult::REASSEMBLING;
-        }
+        return buffer_pkt(conn, pkt, std::nullopt);
+    }
 
     if (pkt.payload.size() < 5) {
         return ParseResult::ERROR;// weird shit, packet is probably broken
@@ -43,17 +52,7 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker 
     tls_len = ntohs(tls_len);
 
     if (pkt.payload.size() < tls_len) {// fragmented, fuck
-        conn.add_reasm_frag(pkt.packet);
-        conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
-
-        if (pkt.transport_proto == IPPROTO_TCP) {
-            const auto *tcph = std::get<const tcphdr *>(pkt.transport_hdr);
-            conn.set_reasm_expected_seq(static_cast<std::uint32_t>(ntohl(tcph->seq) + pkt.payload.size()));
-        }
-        conn.set_reasm_total_size(tls_len + 5);
-        conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
-
-        return ParseResult::REASSEMBLING;// this way packet won't be sent to modifier
+        return buffer_pkt(conn, pkt, std::optional{tls_len});
     }
 
     return ParseResult::SUCCESS;

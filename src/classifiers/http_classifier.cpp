@@ -9,22 +9,20 @@
 #include "../conn_tracker.hpp"
 #include "../consts.hpp"
 
-ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker)
+ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
 {
-    auto &conn =
-        tracker->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
-    if (conn.payload_proto() == L7Proto::HTTP
-        && conn.get_reasm_pos() > 0 && (pkt.get_seq() == 0 || pkt.get_seq() == conn.get_reasm_expected_seq())) {
-        conn.add_reasm_frag(pkt.packet);
-        conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
+    if (conn.get_reasm_frags().empty()) { // if first fragment
+        conn.set_reasm_total_size(HTTP_PARSE_LIMIT);
+        conn.set_payload_proto(L7Proto::HTTP);
+    }
 
-        if (pkt.transport_proto == IPPROTO_TCP) {
-            const auto *tcph = std::get<const tcphdr *>(pkt.transport_hdr);
-            conn.set_reasm_expected_seq(static_cast<std::uint32_t>(ntohl(tcph->seq) + pkt.payload.size()));
-        }
+    conn.add_reasm_frag(pkt.packet);
+    conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
 
+    conn.set_reasm_expected_seq(pkt.get_seq() + static_cast<std::uint32_t>(pkt.payload.size()));
+
+    if (!conn.get_reasm_frags().empty()) { // if not the first fragment
         if (conn.get_reasm_pos() >= conn.get_reasm_total_size()) {
-            // Drop conn? or it is fine
             return ParseResult::ERROR;
         }
 
@@ -39,8 +37,18 @@ ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker
         if (full_http.contains("\r\n\r\n")) {
             return ParseResult::SUCCESS_REASSEMBLED;
         }
+    }
 
-        return ParseResult::REASSEMBLING;
+    return ParseResult::REASSEMBLING;
+}
+
+ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker)
+{
+    auto &conn =
+        tracker->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
+    if (conn.payload_proto() == L7Proto::HTTP
+        && conn.get_reasm_pos() > 0 && (pkt.get_seq() == 0 || pkt.get_seq() == conn.get_reasm_expected_seq())) {
+        return buffer_pkt(conn, pkt);
     }
 
     std::string_view payload_str{ pkt.payload };
@@ -59,17 +67,7 @@ ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker
     std::string_view const full_req{ pkt.payload };
     const auto header_end_pos = full_req.find("\r\n\r\n");
     if (header_end_pos == std::string_view::npos) {
-        conn.add_reasm_frag(pkt.packet);
-        conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
-
-        if (pkt.transport_proto == IPPROTO_TCP) {
-            const auto *tcph = std::get<const tcphdr *>(pkt.transport_hdr);
-            conn.set_reasm_expected_seq(static_cast<std::uint32_t>(ntohl(tcph->seq) + pkt.payload.size()));
-        }
-        conn.set_reasm_total_size(HTTP_PARSE_LIMIT);
-        conn.set_payload_proto(L7Proto::HTTP);
-
-        return ParseResult::REASSEMBLING;
+        return buffer_pkt(conn, pkt);
     }
 
     return ParseResult::SUCCESS;

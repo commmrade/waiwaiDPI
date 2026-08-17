@@ -48,7 +48,7 @@ private:
         std::vector<std::vector<char>> frags;
         std::size_t pos{0};
         std::size_t total_size{0};
-        std::uint32_t expected_seq{0};
+        std::uint32_t expected_seq{0}; // for L7 kinda
     } reasm_;
 
     int l4_proto_{};
@@ -60,11 +60,11 @@ public:
     {
         return l4_proto_;
     }
-    Tcp& get_l4_tcp()
+    [[nodiscard]] const Tcp& get_l4_tcp() const
     {
         return std::get<1>(l4_state_);
     }
-    Udp& get_l4_udp()
+    [[nodiscard]] const Udp& get_l4_udp() const
     {
         return std::get<2>(l4_state_);
     }

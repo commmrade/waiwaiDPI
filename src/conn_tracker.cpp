@@ -11,7 +11,7 @@
 void Connection::track_tcp(const PacketView &packet)
 {
     const tcphdr* tcph = std::get<0>(packet.transport_hdr);
-    Tcp& tcp_state = get_l4_tcp();
+    Tcp& tcp_state = std::get<1>(l4_state_);
     tcp_state.cur_seq = ntohl(tcph->seq);
 
     // Track TCP state
@@ -109,7 +109,7 @@ Connection &ConnTracker::get_conn(const std::uint32_t saddr,
 
 void ConnTracker::clear_dead_connections()
 {
-    auto calculate_timeout = [](Connection& conn) -> int {
+    auto calculate_timeout = [](const Connection& conn) -> int {
         int timeout_value = 0;
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             timeout_value = timeout_for_tcp_state(conn.get_l4_tcp().state);
