@@ -118,7 +118,7 @@ TEST_CASE("SYN state is determined correctly", "[tcp_conntrack]")
     tracker.track(syn_pkt);
 
     auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port);
-    REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::UNKNOWN);
+    REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::SYN);
     tracker.track(ack_pkt);
     REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::ESTAB);
 }
@@ -174,7 +174,7 @@ TEST_CASE("SYN state determination fails", "[tcp_conntrack]")
     tracker.track(syn_pkt);
 
     auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port);
-    REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::UNKNOWN);
+    REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::SYN);
     tracker.track(ack_pkt);
     REQUIRE_FALSE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::ESTAB);
 }

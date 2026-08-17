@@ -21,12 +21,10 @@ void Connection::track_tcp(const PacketView &packet)
     // If we see a SYN + ACK => connection ESTAB (really likely)
     {
         if (tcp_state.state == Tcp::TcpState::UNKNOWN && (tcph->syn && !tcph->ack)) {
-            tcp_state.is_client = true;
+            tcp_state.state = Tcp::TcpState::SYN;
             tcp_state.expected_seq = tcp_state.cur_seq + 1; // it sent SYN, it increased SEQ by 1, if next packet is this seq, that means the SYN was ACKed
-        } else if (tcp_state.state == Tcp::TcpState::UNKNOWN && tcp_state.is_client && (tcph->ack && ntohl(tcph->seq) == tcp_state.expected_seq)) {
+        } else if (tcp_state.state == Tcp::TcpState::SYN && (tcph->ack && ntohl(tcph->seq) == tcp_state.expected_seq)) {
             tcp_state.state = Tcp::TcpState::ESTAB;
-
-            tcp_state.is_client = false;
             tcp_state.expected_seq = 0;
         } else if (tcp_state.state == Tcp::TcpState::UNKNOWN && (tcph->syn && tcph->ack)) {
             tcp_state.state = Tcp::TcpState::ESTAB;
@@ -50,6 +48,25 @@ void Connection::track_tcp(const PacketView &packet)
 }
 void Connection::track_udp([[maybe_unused]] const PacketView &packet) {}
 
+int ConnTracker::timeout_for_tcp_state(const Connection::Tcp::TcpState state)
+{
+    switch (state) {
+    case Connection::Tcp::TcpState::SYN: {
+        return SYN_TCP_CONNECTION_TIMEOUT_SECS;
+        break;
+    }
+    case Connection::Tcp::TcpState::ESTAB: {
+        return ESTAB_TCP_CONNECTION_TIMEOUT_SECS;
+        break;
+    }
+    case Connection::Tcp::TcpState::FIN: {
+        return FIN_TCP_CONNECTION_TIMEOUT_SECS;
+        break;
+    }
+    default:
+        return DEFAULT_CONNECTION_TIMEOUT_SECS;
+    }
+}
 void ConnTracker::track(const PacketView &packet)
 {
     const std::tuple conn_tuple{
@@ -92,11 +109,24 @@ Connection &ConnTracker::get_conn(const std::uint32_t saddr,
 
 void ConnTracker::clear_dead_connections()
 {
+    auto calculate_timeout = [](Connection& conn) -> int {
+        int timeout_value = 0;
+        if (conn.get_l4_proto() == IPPROTO_TCP) {
+            timeout_value = timeout_for_tcp_state(conn.get_l4_tcp().state);
+        } else {
+            timeout_value = DEFAULT_CONNECTION_TIMEOUT_SECS;
+        }
+        return timeout_value;
+    };
+
+
     auto iter = conns_.begin();
     const auto now = std::chrono::system_clock::now();
     while (iter != conns_.end()) {
         const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - iter->second.get_last_packet_time());
-        if (dur.count() >= DEAD_CONNECTION_TIMEOUT_SECS) { // TODO: determine timeout based on tcp conn state, if not tcp, then some default value
+
+        auto timeout = calculate_timeout(iter->second);
+        if (dur.count() >= timeout) { // TODO: determine timeout based on tcp conn state, if not tcp, then some default value
             iter = conns_.erase(iter);
         } else {
             ++iter;

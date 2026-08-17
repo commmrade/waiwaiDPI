@@ -29,7 +29,6 @@ public:
         std::uint32_t cur_seq{};
 
         // helpers
-        bool is_client{false};
         std::uint32_t expected_seq;
     };
     struct Udp
@@ -184,6 +183,8 @@ class ConnTracker
 {
 private:
     std::map<std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t>, Connection> conns_;
+
+    static int timeout_for_tcp_state(const Connection::Tcp::TcpState state);
 public:
     void track(const PacketView& packet);
     Connection& get_conn(const std::uint32_t saddr, const std::uint16_t source, const std::uint32_t daddr, const std::uint16_t dest);
