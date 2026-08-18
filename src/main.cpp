@@ -159,11 +159,8 @@ int main(int argc, char *argv[])
         const auto now = std::chrono::system_clock::now();
         const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - last_check_time);
         if (dur.count() >= CHECK_DEAD_CONNECTIONS_INTERVAL_SECS) {
-            std::println("before clean up: {}", ctx.tracker->conns_size());
             ctx.tracker->clear_dead_connections();
             last_check_time = now;
-
-            std::println("after clean up: {}", ctx.tracker->conns_size());
         }
 
         ssize_t const rcvd = mnl_socket_recvfrom(socket, buf.data(), BUF_SIZE);

@@ -8,6 +8,48 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 
+void Connection::set_l4_proto(const int proto)
+{
+    l4_proto_ = proto;
+    switch (l4_proto_) {
+    case IPPROTO_TCP: {
+        l4_state_.emplace<Tcp>();
+        break;
+    }
+    case IPPROTO_UDP: {
+        l4_state_.emplace<Udp>();
+        break;
+    }
+    default: {
+        throw std::runtime_error("This L4 protocol is not supported");
+    }
+    }
+}
+void Connection::reset_reasm()
+{
+    reasm_.frags.clear();
+    reasm_.pos = 0;
+    reasm_.total_size = 0;
+    reasm_.expected_seq = 0;
+}
+
+void Connection::track_transport(const PacketView &packet)
+{
+    switch (packet.network_hdr->protocol) {
+    case IPPROTO_TCP: {
+        track_tcp(packet);
+        break;
+    }
+    case IPPROTO_UDP: {
+        track_udp(packet);
+        break;
+    }
+    default: {
+        break;
+    }
+    }
+}
+
 void Connection::track_tcp(const PacketView &packet)
 {
     const tcphdr* tcph = std::get<0>(packet.transport_hdr);
@@ -85,19 +127,7 @@ void ConnTracker::track(const PacketView &packet)
         conn_iter->second.set_l4_proto(packet.network_hdr->protocol);
     }
 
-    switch (packet.network_hdr->protocol) {
-    case IPPROTO_TCP: {
-        conn_iter->second.track_tcp(packet);
-        break;
-    }
-    case IPPROTO_UDP: {
-        conn_iter->second.track_udp(packet);
-        break;
-    }
-    default: {
-        break;
-    }
-    }
+    conn_iter->second.track_transport(packet);
 
     conn_iter->second.update_last_packet_time(std::chrono::system_clock::now());
     conn_iter->second.set_bytes_transfered(conn_iter->second.bytes_transfered() + packet.payload.size());
