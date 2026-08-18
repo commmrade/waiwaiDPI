@@ -34,7 +34,7 @@ ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketVie
 ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker& tracker)
 {
     auto &conn =
-       tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
+       tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port(), pkt.network_hdr->protocol);
     if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE
         && conn.get_reasm_pos() > 0 && pkt.get_seq() == conn.get_reasm_expected_seq()) {
         return buffer_pkt(conn, pkt, std::nullopt);

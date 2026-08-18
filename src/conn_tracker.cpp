@@ -116,7 +116,7 @@ int ConnTracker::timeout_for_tcp_state(const Connection::Tcp::TcpState state)
 void ConnTracker::track(const PacketView &packet)
 {
     const std::tuple conn_tuple{
-        packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port()
+        packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port(), packet.network_hdr->protocol
     };
 
     auto conn_iter = conns_.find(conn_tuple);
@@ -136,9 +136,10 @@ void ConnTracker::track(const PacketView &packet)
 Connection &ConnTracker::get_conn(const std::uint32_t saddr,
     const std::uint16_t source,
     const std::uint32_t daddr,
-    const std::uint16_t dest)
+    const std::uint16_t dest,
+    const int proto)
 {
-    return conns_.at({ saddr, source, daddr, dest });
+    return conns_.at({ saddr, source, daddr, dest, proto });
 }
 
 void ConnTracker::clear_dead_connections()

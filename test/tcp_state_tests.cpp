@@ -117,7 +117,7 @@ TEST_CASE("SYN state is determined correctly", "[tcp_conntrack]")
     ConnTracker tracker{};
     tracker.track(syn_pkt);
 
-    auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port);
+    auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port, IPPROTO_TCP);
     REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::SYN);
     tracker.track(ack_pkt);
     REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::ESTAB);
@@ -173,7 +173,7 @@ TEST_CASE("SYN state determination fails", "[tcp_conntrack]")
     ConnTracker tracker{};
     tracker.track(syn_pkt);
 
-    auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port);
+    auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port, IPPROTO_TCP);
     REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::SYN);
     tracker.track(ack_pkt);
     REQUIRE_FALSE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::ESTAB);
@@ -235,7 +235,7 @@ TEST_CASE("SYN-ACK state is determined correctly (server side)", "[tcp_conntrack
     ConnTracker tracker;
 
     tracker.track(synack_pkt);
-    auto &conn = tracker.get_conn(server_ip, server_port, client_ip, client_port);
+    auto &conn = tracker.get_conn(server_ip, server_port, client_ip, client_port, IPPROTO_TCP);
     REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::ESTAB);
 
     tracker.track(data_pkt);
@@ -334,7 +334,7 @@ TEST_CASE("FIN close sequence is determined correctly (client side)", "[tcp_conn
 
     ConnTracker tracker;
     tracker.track(syn_pkt);
-    auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port);
+    auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port, IPPROTO_TCP);
     tracker.track(ack_pkt);
     REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::ESTAB);
 
@@ -382,6 +382,6 @@ TEST_CASE("RST immediately terminates the connection (client side)", "[tcp_connt
 
     ConnTracker tracker;
     tracker.track(rst_pkt);
-    auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port);
+    auto &conn = tracker.get_conn(client_ip, client_port, server_ip, server_port, IPPROTO_TCP);
     REQUIRE(conn.get_l4_tcp().state == Connection::Tcp::TcpState::CLOSED);
 }

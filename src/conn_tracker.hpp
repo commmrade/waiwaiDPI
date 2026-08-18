@@ -96,7 +96,7 @@ public:
 class ConnTracker
 {
 private:
-    std::map<std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t>, Connection> conns_;
+    std::map<std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t, int>, Connection> conns_;
 
     static int timeout_for_tcp_state(const Connection::Tcp::TcpState state);
 
@@ -107,7 +107,8 @@ public:
     Connection &get_conn(const std::uint32_t saddr,
         const std::uint16_t source,
         const std::uint32_t daddr,
-        const std::uint16_t dest);
+        const std::uint16_t dest,
+        const int proto);
 };
 
 #endif// WAIWAIDPI_CONN_TRACKER_HPP

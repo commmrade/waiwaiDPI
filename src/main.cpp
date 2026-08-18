@@ -62,7 +62,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
     ctx->tracker->track(packet);
     auto &conn = ctx->tracker->get_conn(
-        packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port());
+        packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port(), packet.network_hdr->protocol);
 
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
