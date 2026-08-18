@@ -18,11 +18,11 @@ enum class ParseResult : std::uint8_t
     SUCCESS
 };
 
-class PayloadClassifier
+class PayloadClassifier //NOLINT
 {
 public:
     virtual ~PayloadClassifier() = default;
-    virtual ParseResult classify(const PacketView& pkt, ConnTracker* tracker) = 0;
+    virtual ParseResult classify(const PacketView& pkt, ConnTracker& tracker) = 0;
     [[nodiscard]] virtual constexpr L7Proto protocol() const = 0;
 };
 

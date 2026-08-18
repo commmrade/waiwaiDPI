@@ -21,11 +21,9 @@
 struct PacketView
 {
     std::span<const char> packet;
-    std::size_t headers_len{ 0 };
     std::span<const char> payload;
 
     const iphdr *network_hdr{ nullptr };
-    int transport_proto{};
     std::variant<const tcphdr *, const udphdr *> transport_hdr;
 
     L7Proto payload_proto{ L7Proto::UNKNOWN };
@@ -36,6 +34,7 @@ struct PacketView
     [[nodiscard]] std::uint16_t get_source_port() const;
     [[nodiscard]] std::uint16_t get_dest_port() const;
     [[nodiscard]] std::optional<std::uint32_t> get_seq() const;
+    [[nodiscard]] std::size_t transport_hdr_len() const;
 };
 
 [[nodiscard]] PacketView parse_packet(std::span<const char> packet);

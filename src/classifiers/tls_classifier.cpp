@@ -31,16 +31,17 @@ ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketVie
     return ParseResult::REASSEMBLING;
 }
 
-ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker *tracker)
+ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker& tracker)
 {
     auto &conn =
-       tracker->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
+       tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
     if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE
         && conn.get_reasm_pos() > 0 && pkt.get_seq() == conn.get_reasm_expected_seq()) {
         return buffer_pkt(conn, pkt, std::nullopt);
     }
 
-    if (pkt.payload.size() < 5) {
+    constexpr auto TLS_HDR_LEN = 5;
+    if (pkt.payload.size() < TLS_HDR_LEN) {
         return ParseResult::ERROR;// weird shit, packet is probably broken
     }
 

@@ -33,7 +33,7 @@ ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
         for (const auto &frag : conn.get_reasm_frags()) {
             const PacketView pkt_frag = parse_packet(frag);
             full_http.insert(
-                full_http.end(), frag.begin() + static_cast<std::ptrdiff_t>(pkt_frag.headers_len), frag.end());
+                full_http.end(), frag.begin() + static_cast<std::ptrdiff_t>(pkt_frag.network_hdr->ihl * 4 + pkt_frag.transport_hdr_len()), frag.end());
         }
 
         if (full_http.contains("\r\n\r\n")) {
@@ -44,10 +44,10 @@ ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
     return ParseResult::REASSEMBLING;
 }
 
-ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker *tracker)
+ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker& tracker)
 {
     auto &conn =
-        tracker->get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
+        tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port());
     if (conn.payload_proto() == L7Proto::HTTP
         && conn.get_reasm_pos() > 0 && (pkt.get_seq() == conn.get_reasm_expected_seq())) {
         return buffer_pkt(conn, pkt);

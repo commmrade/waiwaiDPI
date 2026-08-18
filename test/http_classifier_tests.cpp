@@ -10,7 +10,8 @@ unsigned char full_http_req[] = {0x45, 0x0, 0x1, 0xb5, 0xb3, 0xd, 0x40, 0x0, 0x4
 TEST_CASE("Full HTTP is classified correctly", "[http_classifier]")
 {
     ConnTracker tracker{};
-    Classifier classifier{&tracker};
+    Classifier classifier{tracker};
+    classifier.add(std::make_unique<HttpClassifier>());
 
     Context ctx;
     ctx.classifier = &classifier;
@@ -29,7 +30,8 @@ TEST_CASE("Full HTTP is classified correctly", "[http_classifier]")
 TEST_CASE("Split HTTP is classified correctly", "[http_classifier]")
 {
     ConnTracker tracker{};
-    Classifier classifier{&tracker};
+    Classifier classifier{tracker};
+    classifier.add(std::make_unique<HttpClassifier>());
 
     Context ctx;
     ctx.classifier = &classifier;
@@ -87,7 +89,8 @@ TEST_CASE("Split HTTP is classified correctly", "[http_classifier]")
 TEST_CASE("Split HTTP at headers end", "[http_classifier]")
 {
     ConnTracker tracker{};
-    Classifier classifier{&tracker};
+    Classifier classifier{tracker};
+    classifier.add(std::make_unique<HttpClassifier>());
 
     Context ctx;
     ctx.classifier = &classifier;

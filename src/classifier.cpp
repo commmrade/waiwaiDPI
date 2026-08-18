@@ -21,7 +21,7 @@ std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
     assert(!pkt.payload.empty());// NOLINT
 
     for (const auto &classifier : classifiers_) {
-        switch (classifier->classify(pkt, tracker_)) {
+        switch (classifier->classify(pkt, tracker_.get())) {
         case ParseResult::SUCCESS: {
             return { classifier->protocol() };
         }
@@ -39,6 +39,11 @@ std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
     }
 
     return { L7Proto::UNKNOWN };
+}
+
+void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
+{
+    classifiers_.emplace_back(std::move(classifier));
 }
 
 ParseResult Classifier::classify(PacketView &pkt)

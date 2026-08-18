@@ -11,7 +11,8 @@ std::span<const char> packet{reinterpret_cast<const char*>(bytes), sizeof(bytes)
 TEST_CASE("Full TLS is classified correctly", "[tls_classifier]")
 {
     ConnTracker tracker{};
-    Classifier classifier{&tracker};
+    Classifier classifier{tracker};
+    classifier.add(std::make_unique<TlsHandshakeClassifier>());
 
     Context ctx;
     ctx.classifier = &classifier;
@@ -28,7 +29,8 @@ TEST_CASE("Full TLS is classified correctly", "[tls_classifier]")
 TEST_CASE("Split TLS is classified correctly", "[tls_classifier]")
 {
     ConnTracker tracker{};
-    Classifier classifier{&tracker};
+    Classifier classifier{tracker};
+    classifier.add(std::make_unique<TlsHandshakeClassifier>());
 
     Context ctx;
     ctx.classifier = &classifier;

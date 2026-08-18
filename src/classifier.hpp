@@ -25,17 +25,15 @@ class ConnTracker;
 class Classifier
 {
 private:
-    ConnTracker *tracker_{ nullptr };
+    std::reference_wrapper<ConnTracker> tracker_;
     std::vector<std::unique_ptr<PayloadClassifier>> classifiers_;
 
     std::expected<L7Proto, ParseResult> try_payload(PacketView &pkt);
 
 public:
-    explicit Classifier(ConnTracker *tracker) : tracker_(tracker)
-    {
-        classifiers_.push_back(std::make_unique<HttpClassifier>());
-        classifiers_.push_back(std::make_unique<TlsHandshakeClassifier>());
-    }
+    explicit Classifier(ConnTracker& tracker) : tracker_(tracker) {}
+
+    void add(std::unique_ptr<PayloadClassifier>&& classifier);
 
     ParseResult classify(PacketView &pkt);
 };

@@ -146,7 +146,10 @@ int main(int argc, char *argv[])
 
 
     ConnTracker tracker{};
-    Classifier cfier{ &tracker };
+
+    Classifier cfier{ tracker };
+    cfier.add(std::make_unique<HttpClassifier>());
+    cfier.add(std::make_unique<TlsHandshakeClassifier>());
 
     Context ctx{};
     ctx.sock = socket;

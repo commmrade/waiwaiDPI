@@ -6,7 +6,7 @@
 
 std::uint16_t PacketView::get_source_port() const
 {
-    switch (transport_proto) {
+    switch (network_hdr->protocol) {
     case IPPROTO_TCP: {
         const auto *tcph = std::get<const tcphdr *>(transport_hdr);
         return ntohs(tcph->source);
@@ -24,7 +24,7 @@ std::uint16_t PacketView::get_source_port() const
 }
 std::uint16_t PacketView::get_dest_port() const
 {
-    switch (transport_proto) {
+    switch (network_hdr->protocol) {
     case IPPROTO_TCP: {
         const auto *tcph = std::get<const tcphdr *>(transport_hdr);
         return ntohs(tcph->dest);
@@ -42,7 +42,7 @@ std::uint16_t PacketView::get_dest_port() const
 }
 std::optional<std::uint32_t> PacketView::get_seq() const
 {
-    switch (transport_proto) {
+    switch (network_hdr->protocol) {
     case IPPROTO_TCP: {
         const auto *tcph = std::get<const tcphdr *>(transport_hdr);
         return ntohl(tcph->seq);
@@ -50,6 +50,22 @@ std::optional<std::uint32_t> PacketView::get_seq() const
     }
     default: {
         return std::nullopt;
+    }
+    }
+}
+std::size_t PacketView::transport_hdr_len() const
+{
+    switch (network_hdr->protocol) {
+    case IPPROTO_TCP: {
+        const auto *tcph = std::get<const tcphdr *>(transport_hdr);
+        return tcph->doff * 4;
+        break;
+    }
+    case IPPROTO_UDP: {
+        return sizeof(udphdr);
+    }
+    default: {
+        return 0;
     }
     }
 }
@@ -61,21 +77,16 @@ PacketView parse_packet(std::span<const char> packet)
 
     const auto *iph = reinterpret_cast<const iphdr *>(packet.data());// NOLINT
     pkt.network_hdr = iph;
-    pkt.transport_proto = iph->protocol;
 
     switch (iph->protocol) {
     case IPPROTO_TCP: {
         const auto *tcph = reinterpret_cast<const tcphdr *>(std::next(packet.data(), iph->ihl * 4));// NOLINT
         pkt.transport_hdr.emplace<const tcphdr *>(tcph);
-
-        pkt.headers_len = iph->ihl * 4 + tcph->doff * 4;
         break;
     }
     case IPPROTO_UDP: {
         const auto *udph = reinterpret_cast<const udphdr *>(std::next(packet.data(), iph->ihl * 4));// NOLINT
         pkt.transport_hdr.emplace<const udphdr *>(udph);
-
-        pkt.headers_len = iph->ihl * 4 + sizeof(*udph);
         break;
     }
     default: {
@@ -83,8 +94,9 @@ PacketView parse_packet(std::span<const char> packet)
     }
     }
 
-    pkt.payload = std::span<const char>{ std::next(packet.data(), static_cast<std::ptrdiff_t>(pkt.headers_len)),
-        packet.size() - pkt.headers_len };
+    const auto headers_len = (pkt.network_hdr->ihl * 4) + (pkt.transport_hdr_len());
+    pkt.payload = std::span<const char>{ std::next(packet.data(), static_cast<std::ptrdiff_t>(headers_len)),
+        packet.size() - headers_len };
 
     return pkt;
 }

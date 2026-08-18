@@ -13,7 +13,7 @@ class TlsHandshakeClassifier final : public PayloadClassifier
 {
     ParseResult buffer_pkt(Connection& conn, const PacketView& pkt, std::optional<std::size_t> tls_len);
 public:
-    ParseResult classify(const PacketView &pkt, ConnTracker *tracker) override;
+    ParseResult classify(const PacketView &pkt, ConnTracker& tracker) override;
     [[nodiscard]] constexpr L7Proto protocol() const override { return L7Proto::TLS_HANDSHAKE; }
 };
 
