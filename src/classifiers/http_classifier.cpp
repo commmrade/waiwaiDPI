@@ -72,5 +72,7 @@ ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker& tracker
         return buffer_pkt(conn, pkt);
     }
 
+    conn.set_payload_proto(L7Proto::HTTP);
+
     return ParseResult::SUCCESS;
 }

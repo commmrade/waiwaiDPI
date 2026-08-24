@@ -58,5 +58,7 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker&
         return buffer_pkt(conn, pkt, std::optional{tls_len});
     }
 
+    conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
+
     return ParseResult::SUCCESS;
 }

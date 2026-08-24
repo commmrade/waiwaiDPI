@@ -11,7 +11,7 @@ class DumbassModifier final : public Modifier
 {
 public:
     bool modify(std::vector<Packet> &vec) override;
-    bool matches(const int l4_proto, const L7Proto l7_proto) const override;
+    [[nodiscard]] bool matches(const int l4_proto, const L7Proto l7_proto) const override;
 };
 
 
