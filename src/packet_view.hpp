@@ -32,8 +32,7 @@ struct PacketView
         false
     };// that means payload is incomplete, complete payload is fragmented inside Connection class
 
-    std::optional<std::uint32_t> packet_id;
-    bool should_use_orig; // used by modifier
+    std::uint32_t packet_id;
 
     [[nodiscard]] std::uint16_t get_source_port() const;
     [[nodiscard]] std::uint16_t get_dest_port() const;
@@ -41,19 +40,31 @@ struct PacketView
     [[nodiscard]] std::size_t transport_hdr_len() const;
 };
 
+struct PacketAction
+{
+    std::uint32_t packet_id;
+    enum class Action : std::uint8_t {
+        ACCEPT,// NF_ACCEPT(packet_id)
+        DROP,// NF_DROP(packet_id)
+        DROP_AND_SEND,// NF_DROP(packet_id) + send(raw_sock, ...)
+        SEND// send(raw_sock, ...)
+    } action;
+};
 
+/// A struct for Owned packets. Heavily used with modifiers
 struct Packet
 {
     std::vector<char> packet;
-    std::optional<std::uint32_t> packet_id;
-    bool should_use_orig{false};
+
+    PacketAction action{ .packet_id = 0, .action = PacketAction::Action::SEND };
 
     Packet() = default;
-    explicit Packet(const PacketView& view) : packet(view.packet.begin(), view.packet.end()), packet_id(view.packet_id), should_use_orig(view.should_use_orig)
-    {
-    }
+    explicit Packet(const PacketView &view)
+        : packet(view.packet.begin(), view.packet.end()), action(view.packet_id, PacketAction::Action::ACCEPT)
+    {}
 };
 
 [[nodiscard]] PacketView parse_packet(std::span<const char> packet);
+[[nodiscard]] PacketView parse_packet(const Packet &packet);
 
 #endif// WAIWAIDPI_PACKET_HPP

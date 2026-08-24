@@ -100,3 +100,35 @@ PacketView parse_packet(std::span<const char> packet)
 
     return pkt;
 }
+
+PacketView parse_packet(const Packet &packet)
+{
+    PacketView pkt;
+    pkt.packet = packet.packet;
+    pkt.packet_id = packet.action.packet_id;
+
+    const auto *iph = reinterpret_cast<const iphdr *>(packet.packet.data());// NOLINT
+    pkt.network_hdr = iph;
+
+    switch (iph->protocol) {
+    case IPPROTO_TCP: {
+        const auto *tcph = reinterpret_cast<const tcphdr *>(std::next(packet.packet.data(), iph->ihl * 4));// NOLINT
+        pkt.transport_hdr.emplace<const tcphdr *>(tcph);
+        break;
+    }
+    case IPPROTO_UDP: {
+        const auto *udph = reinterpret_cast<const udphdr *>(std::next(packet.packet.data(), iph->ihl * 4));// NOLINT
+        pkt.transport_hdr.emplace<const udphdr *>(udph);
+        break;
+    }
+    default: {
+        throw std::runtime_error("This transport layer protocol is not supported. How?");
+    }
+    }
+
+    const auto headers_len = (pkt.network_hdr->ihl * 4) + (pkt.transport_hdr_len());
+    pkt.payload = std::span<const char>{ std::next(packet.packet.data(), static_cast<std::ptrdiff_t>(headers_len)),
+        packet.packet.size() - headers_len };
+
+    return pkt;
+}

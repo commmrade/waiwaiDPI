@@ -8,7 +8,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 
-void Connection::set_l4_proto(const int proto)
+void Connection::set_l4_proto(const std::uint8_t proto)
 {
     l4_proto_ = proto;
     switch (l4_proto_) {

@@ -15,7 +15,7 @@ ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketVie
         conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
     }
 
-    conn.add_reasm_frag(pkt.packet);
+    conn.add_reasm_frag(pkt);
     conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
 
     if (auto seq_opt = pkt.get_seq(); seq_opt.has_value()) {

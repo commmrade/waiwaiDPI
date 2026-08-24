@@ -38,7 +38,7 @@ private:
 
     struct
     {
-        std::vector<std::vector<char>> frags;
+        std::vector<Packet> frags;
         std::size_t pos{ 0 };
         std::size_t total_size{ 0 };
         std::optional<std::uint32_t> expected_seq{ 0 };
@@ -63,8 +63,8 @@ public:
 
     void reset_reasm();
 
-    void add_reasm_frag(std::span<const char> frag) { reasm_.frags.emplace_back(frag.begin(), frag.end()); }
-    const std::vector<std::vector<char>> &get_reasm_frags() const { return reasm_.frags; }
+    void add_reasm_frag(const PacketView& pkt) { reasm_.frags.emplace_back(pkt); }
+    [[nodiscard]] const std::vector<Packet> &get_reasm_frags() const { return reasm_.frags; }
     [[nodiscard]] std::size_t get_reasm_pos() const { return reasm_.pos; }
     void set_reasm_pos(const std::size_t pos) { reasm_.pos = pos; }
     [[nodiscard]] std::size_t get_reasm_total_size() const { return reasm_.total_size; }

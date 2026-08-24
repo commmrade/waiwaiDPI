@@ -59,8 +59,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         packet_len };
 
     auto packet = parse_packet(packet_buf);
-    packet.packet_id.emplace(ntohl(pkt_hdr->packet_id));
-    packet.should_use_orig = true;
+    packet.packet_id = ntohl(pkt_hdr->packet_id);
 
     std::array<char, INET_ADDRSTRLEN> ip_src{};
     std::array<char, INET_ADDRSTRLEN> ip_dst{};
@@ -76,7 +75,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
     std::vector<std::unique_ptr<Modifier>> modifiers;
     modifiers.push_back(std::make_unique<HttpHostModifier>());
-    // modifiers.push_back(std::make_unique<DumbassModifier>());
+    modifiers.push_back(std::make_unique<DumbassModifier>());
 
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
@@ -98,50 +97,57 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(cfed_pkt);
             }
 
-            auto view = parse_packet(packets.front().packet);
-
-            bool matched = false;
             for (auto &modifier : modifiers) {
                 if (!modifier->matches(conn.get_l4_proto(), conn.payload_proto())) {
                     continue;
                 }
-                matched = true;
 
                 if (!modifier->modify(packets)) {
                 }
             }
 
-            if (matched) {
-                for (const auto &send_pkt : packets) {
-                    if (send_pkt.should_use_orig) {
-                        assert(send_pkt.packet_id.has_value());
-                        ret = send_verdict(ctx->sock, send_pkt.packet_id.value(), NF_ACCEPT);
-                        if (ret < 0) { perror("send verdict failed, but dont stop"); }
-                    } else {
-                        if (send_pkt.packet_id.has_value()) {
-                            ret = send_verdict(ctx->sock, send_pkt.packet_id.value(), NF_DROP);
-                            if (ret < 0) { perror("send drop failed, but dont stop"); }
-                        }
-                        // we dropped this packet from netfilter
-                        // now, send it via the raw socket
-                        const auto *ip = reinterpret_cast<const iphdr *>(send_pkt.packet.data());
-
-                        sockaddr_in dest_addr{};
-                        dest_addr.sin_family = AF_INET;
-                        dest_addr.sin_addr.s_addr = ip->daddr;
-
-                        ssize_t const sent = sendto(ctx->raw_sock,
-                            send_pkt.packet.data(),
-                            send_pkt.packet.size(),
-                            0,
-                            reinterpret_cast<sockaddr *>(&dest_addr),
-                            sizeof(dest_addr));
-                        if (sent < 0) { perror("could not send a packet, continuing"); }
+            for (const auto &send_pkt : packets) {
+                switch (send_pkt.action.action) {
+                case PacketAction::Action::ACCEPT: {
+                    assert(send_pkt.action.packet_id);
+                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_ACCEPT);
+                    if (ret < 0) {
+                        perror("send accept failed, but dont stop");
                     }
+                    break;
                 }
-            } else if (!matched) {
-                ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
-                assert(ret);
+                case PacketAction::Action::DROP: {
+                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_DROP);
+                    if (ret < 0) {
+                        perror("send drop failed, dont stop");
+                    }
+                    break;
+                }
+                case PacketAction::Action::DROP_AND_SEND: {
+                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_DROP);
+                    if (ret < 0) {
+                        perror("send drop failed, dont stop");
+                    }
+                    std::println("AFTER DROP AND SEND");
+                    [[fallthrough]];
+                }
+                case PacketAction::Action::SEND: {
+                    const auto *ip = reinterpret_cast<const iphdr *>(send_pkt.packet.data());
+
+                    sockaddr_in dest_addr{};
+                    dest_addr.sin_family = AF_INET;
+                    dest_addr.sin_addr.s_addr = ip->daddr;
+
+                    ssize_t const sent = sendto(ctx->raw_sock,
+                        send_pkt.packet.data(),
+                        send_pkt.packet.size(),
+                        0,
+                        reinterpret_cast<sockaddr *>(&dest_addr),
+                        sizeof(dest_addr));
+                    if (sent < 0) { perror("could not send a packet, continuing"); }
+                    break;
+                }
+                }
             }
         }
     } else {

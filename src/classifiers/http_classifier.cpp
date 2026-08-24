@@ -16,7 +16,7 @@ ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
         conn.set_payload_proto(L7Proto::HTTP);
     }
 
-    conn.add_reasm_frag(pkt.packet);
+    conn.add_reasm_frag(pkt);
     conn.set_reasm_pos(conn.get_reasm_pos() + pkt.payload.size());
 
     if (auto seq_opt = pkt.get_seq(); seq_opt.has_value()) {
@@ -33,7 +33,7 @@ ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
         for (const auto &frag : conn.get_reasm_frags()) {
             const PacketView pkt_frag = parse_packet(frag);
             full_http.insert(
-                full_http.end(), frag.begin() + static_cast<std::ptrdiff_t>(pkt_frag.network_hdr->ihl * 4 + pkt_frag.transport_hdr_len()), frag.end());
+                full_http.end(), frag.packet.begin() + static_cast<std::ptrdiff_t>((pkt_frag.network_hdr->ihl * 4) + pkt_frag.transport_hdr_len()), frag.packet.end());
         }
 
         if (full_http.contains("\r\n\r\n")) {

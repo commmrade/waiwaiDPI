@@ -18,7 +18,7 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
 {
     bool host_found = false;
     for (std::size_t i = 0; i < vec.size(); ++i) {
-        const auto pkt_view = parse_packet(vec[i].packet);
+        const auto pkt_view = parse_packet(vec[i]);
         const std::string_view pkt_pl{pkt_view.payload};
 
         constexpr std::string_view HOST_HEADER_NAME = "Host:";
@@ -40,7 +40,8 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
 
 
         Packet first_packet = construct_packet_from(part1, pkt_view);
-        first_packet.packet_id = pkt_view.packet_id;
+        first_packet.action.action = PacketAction::Action::DROP_AND_SEND;
+        first_packet.action.packet_id = pkt_view.packet_id;
 
         auto* ip = reinterpret_cast<iphdr*>(first_packet.packet.data());
         auto* tcp = reinterpret_cast<tcphdr*>(first_packet.packet.data() + (ip->ihl * 4));
@@ -49,6 +50,9 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
         tcp->check = tcp_calc_cksum(ip, tcp, part1);
 
         Packet second_packet = construct_packet_from(part2, pkt_view);
+        second_packet.action.action = PacketAction::Action::SEND;
+        second_packet.action.packet_id = 0;
+
         ip = reinterpret_cast<iphdr*>(second_packet.packet.data());
         tcp = reinterpret_cast<tcphdr*>(second_packet.packet.data() + (ip->ihl * 4));
 
