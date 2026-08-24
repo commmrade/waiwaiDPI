@@ -3,7 +3,10 @@
 
 
 #include "consts.hpp"
+#include "modifiers/dumbass_modifier.hpp"
+#include "modifiers/http_host_modifier.hpp"
 #include "nfq.hpp"
+
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstring>
@@ -24,6 +27,8 @@ struct Context
     Classifier *classifier{ nullptr };
 
     ConnTracker *tracker{ nullptr };
+
+    int raw_sock;
 };
 
 int cb_loop(const struct nlmsghdr *nlh, void *data)
@@ -55,6 +60,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
     auto packet = parse_packet(packet_buf);
     packet.packet_id.emplace(ntohl(pkt_hdr->packet_id));
+    packet.should_use_orig = true;
 
     std::array<char, INET_ADDRSTRLEN> ip_src{};
     std::array<char, INET_ADDRSTRLEN> ip_dst{};
@@ -62,41 +68,83 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     inet_ntop(AF_INET, &packet.network_hdr->daddr, ip_dst.data(), ip_dst.size());
 
     ctx->tracker->track(packet);
-    auto &conn = ctx->tracker->get_conn(
-        packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port(), packet.network_hdr->protocol);
+    auto &conn = ctx->tracker->get_conn(packet.network_hdr->saddr,
+        packet.get_source_port(),
+        packet.network_hdr->daddr,
+        packet.get_dest_port(),
+        packet.network_hdr->protocol);
+
+    std::vector<std::unique_ptr<Modifier>> modifiers;
+    modifiers.push_back(std::make_unique<HttpHostModifier>());
+    modifiers.push_back(std::make_unique<DumbassModifier>());
 
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
             auto &cfed_pkt = packet;
-            if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
-                // todo
-            } else if (cfed_pkt.payload_proto == L7Proto::HTTP) {
 
-                std::vector<Packet> packets;
+            std::vector<Packet> packets;
 
-                if (cfed_pkt.is_payload_reasm) {
-                    const auto frags = conn.get_reasm_frags();
-                    conn.reset_reasm();
+            if (cfed_pkt.is_payload_reasm) {
+                const auto frags = conn.get_reasm_frags();
+                conn.reset_reasm();
 
-                    packets.reserve(frags.size());
-                    for (const auto &frag : frags) {
-                        const PacketView http_pkt = parse_packet(frag);
-                        packets.emplace_back(http_pkt);
-                    }
-                } else {
-                    packets.emplace_back(cfed_pkt);
+                packets.reserve(frags.size());
+                for (const auto &frag : frags) {
+                    PacketView http_pkt = parse_packet(frag);
+                    http_pkt.payload_proto = cfed_pkt.payload_proto;
+                    packets.emplace_back(http_pkt);
+                }
+            } else {
+                packets.emplace_back(cfed_pkt);
+            }
+
+            for (auto &modifier : modifiers) {
+                if (!modifier->matches(conn.get_l4_proto(), conn.payload_proto())) {
+                    continue;
                 }
 
+                // now modifier is supposed to be sure that these packets CAN be handled, because all the requirements match (Protocols)
+                if (!modifier->modify(packets)) {
+                    // since modifier did nothing, i can just send it because all of those are just original packets
+                    for (const auto &send_pkt : packets) {
+                        assert(send_pkt.packet_id.has_value());
+                        ret = send_verdict(ctx->sock, send_pkt.packet_id.value(), NF_ACCEPT);
+                        if (ret < 0) { perror("send verdict failed, but dont stop"); }
+                    }
+                } else {
+                    for (const auto &send_pkt : packets) {
+                        if (send_pkt.should_use_orig) {
+                            assert(send_pkt.packet_id.has_value());
+                            ret = send_verdict(ctx->sock, send_pkt.packet_id.value(), NF_ACCEPT);
+                            if (ret < 0) { perror("send verdict failed, but dont stop"); }
+                        } else {
+                            if (send_pkt.packet_id.has_value()) {
+                                ret = send_verdict(ctx->sock, send_pkt.packet_id.value(), NF_DROP);
+                                if (ret < 0) { perror("send drop failed, but dont stop"); }
+                            }
+                            // we dropped this packet from netfilter
+                            // now, send it via the raw socket
+                            const auto *ip = reinterpret_cast<const iphdr *>(send_pkt.packet.data());
+
+                            sockaddr_in dest_addr{};
+                            dest_addr.sin_family = AF_INET;
+                            dest_addr.sin_addr.s_addr = ip->daddr;
+
+                            ssize_t const sent = sendto(ctx->raw_sock,
+                                send_pkt.packet.data(),
+                                send_pkt.packet.size(),
+                                0,
+                                reinterpret_cast<sockaddr *>(&dest_addr),
+                                sizeof(dest_addr));
+                            if (sent < 0) { perror("could not send a packet, continuing"); }
+                        }
+                    }
+                }
             }
         }
     }
 
-    ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
-    if (ret < 0) {
-        perror("send verdict");
-        return MNL_CB_ERROR;
-    }
 
     return MNL_CB_OK;
 }
@@ -104,6 +152,26 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 int main(int argc, char *argv[])
 {
     int ret = 0;
+
+    int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (raw_sock < 0) {
+        perror("socket");
+        return EXIT_FAILURE;
+    }
+
+    int enable = 1;
+    ret = setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &enable, sizeof(enable));
+    if (ret < 0) {
+        perror("setsockopt");
+        return EXIT_FAILURE;
+    }
+
+    int mark = 0x14;
+    ret = setsockopt(raw_sock, SOL_SOCKET, SO_MARK, &mark, sizeof(mark));
+    if (ret < 0) {
+        perror("setsockopt");
+        return EXIT_FAILURE;
+    }
 
     mnl_socket *socket = mnl_socket_open(NETLINK_NETFILTER);
     if (!socket) {
@@ -155,6 +223,7 @@ int main(int argc, char *argv[])
     ctx.sock = socket;
     ctx.classifier = &cfier;
     ctx.tracker = &tracker;
+    ctx.raw_sock = raw_sock;
 
     auto last_check_time = std::chrono::system_clock::now();
 

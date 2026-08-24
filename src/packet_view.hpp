@@ -48,6 +48,7 @@ struct Packet
     std::optional<std::uint32_t> packet_id;
     bool should_use_orig{false};
 
+    Packet() = default;
     explicit Packet(const PacketView& view) : packet(view.packet.begin(), view.packet.end()), packet_id(view.packet_id), should_use_orig(view.should_use_orig)
     {
     }
