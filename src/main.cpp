@@ -54,6 +54,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         packet_len };
 
     auto packet = parse_packet(packet_buf);
+    packet.packet_id.emplace(ntohl(pkt_hdr->packet_id));
 
     std::array<char, INET_ADDRSTRLEN> ip_src{};
     std::array<char, INET_ADDRSTRLEN> ip_dst{};
@@ -69,56 +70,24 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         if (res == ParseResult::SUCCESS) {
             auto &cfed_pkt = packet;
             if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
-                std::println("Got a tls handshake");
-
-                // {
-                //     auto modifier = smth();
-                //     std::vector<PacketView> packets;
-                //
-                //     if (!conn.get_reasm_frags().empty()) {
-                //         packets = conn.get_reasm_frags();
-                //     } else {
-                //         packets.push_back(packet);
-                //     }
-                //
-                //     std::vector<PacketView> output_packets;
-                //     output_packets.reserve(packets.size());
-                //
-                //     for (auto& pkt : packets) {
-                //         modifier->process(output_packets, pkt);
-                //         // internally it may split this packet in several parts and add each one to output_packets
-                //         // but this should be later optimized, so i dont waste time on copying and so on
-                //         // first, make it work
-                //         // then, make it "right"
-                //     }
-                //
-                //     for (auto& output_pkt : output_packets) {
-                //         if (output_pkt.is_original) {
-                //             send_verdict(output_pkt.packet_id, ...);
-                //         } else {
-                //             send(...);
-                //         }
-                //     }
-                // }
-
-                conn.set_done(true);
+                // todo
             } else if (cfed_pkt.payload_proto == L7Proto::HTTP) {
+
+                std::vector<Packet> packets;
+
                 if (cfed_pkt.is_payload_reasm) {
                     const auto frags = conn.get_reasm_frags();
                     conn.reset_reasm();
 
-                    std::string http_req{};
-
+                    packets.reserve(frags.size());
                     for (const auto &frag : frags) {
                         const PacketView http_pkt = parse_packet(frag);
-                        http_req.insert(http_req.end(), http_pkt.payload.begin(), http_pkt.payload.end());
+                        packets.emplace_back(http_pkt);
                     }
-
-                    std::println(
-                        "Reassembled http request from {} frags: {}", frags.size(), std::string_view{ http_req });
                 } else {
-                    std::println("full http request: {}", std::string_view{ cfed_pkt.payload });
+                    packets.emplace_back(cfed_pkt);
                 }
+
             }
         }
     }

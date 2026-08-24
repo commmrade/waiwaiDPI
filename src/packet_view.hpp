@@ -16,6 +16,7 @@
 #include <span>
 #include <stdexcept>
 #include <variant>
+#include <vector>
 
 
 struct PacketView
@@ -31,10 +32,25 @@ struct PacketView
         false
     };// that means payload is incomplete, complete payload is fragmented inside Connection class
 
+    std::optional<std::uint32_t> packet_id;
+    bool should_use_orig; // used by modifier
+
     [[nodiscard]] std::uint16_t get_source_port() const;
     [[nodiscard]] std::uint16_t get_dest_port() const;
     [[nodiscard]] std::optional<std::uint32_t> get_seq() const;
     [[nodiscard]] std::size_t transport_hdr_len() const;
+};
+
+
+struct Packet
+{
+    std::vector<char> packet;
+    std::optional<std::uint32_t> packet_id;
+    bool should_use_orig{false};
+
+    explicit Packet(const PacketView& view) : packet(view.packet.begin(), view.packet.end()), packet_id(view.packet_id), should_use_orig(view.should_use_orig)
+    {
+    }
 };
 
 [[nodiscard]] PacketView parse_packet(std::span<const char> packet);
