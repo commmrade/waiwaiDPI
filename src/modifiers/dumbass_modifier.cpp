@@ -15,7 +15,7 @@ bool DumbassModifier::modify(std::vector<Packet> &vec)
 
     return true;
 }
-bool DumbassModifier::matches([[maybe_unused]] const int l4_proto, [[maybe_unused]] const L7Proto l7_proto) const
+bool DumbassModifier::matches([[maybe_unused]] const std::uint8_t l4_proto, [[maybe_unused]] const L7Proto l7_proto) const
 {
     return true;
 }

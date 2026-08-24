@@ -12,7 +12,7 @@ class HttpHostModifier final : public Modifier
 {
 public:
     bool modify(std::vector<Packet> &vec) override;
-    [[nodiscard]] bool matches(const int l4_proto, const L7Proto l7_proto) const override;
+    [[nodiscard]] bool matches(const std::uint8_t    l4_proto, const L7Proto l7_proto) const override;
 };
 
 

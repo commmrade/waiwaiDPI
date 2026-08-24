@@ -44,7 +44,7 @@ private:
         std::optional<std::uint32_t> expected_seq{ 0 };
     } reasm_;
 
-    int l4_proto_{};
+    std::uint8_t l4_proto_{};
     std::variant<std::monostate, Tcp, Udp> l4_state_;
 
     bool is_done_{ false };// should this connection be handled later on? FIX: TEMPORARY (hopefully)
@@ -53,10 +53,10 @@ private:
     void track_udp(const PacketView &packet);
 
 public:
-    [[nodiscard]] int get_l4_proto() const { return l4_proto_; }
+    [[nodiscard]] std::uint8_t get_l4_proto() const { return l4_proto_; }
     [[nodiscard]] const Tcp &get_l4_tcp() const { return std::get<1>(l4_state_); }
     [[nodiscard]] const Udp &get_l4_udp() const { return std::get<2>(l4_state_); }
-    void set_l4_proto(const int proto);
+    void set_l4_proto(const std::uint8_t proto);
 
 
     bool is_reassembling() const { return reasm_.pos > 0 || reasm_.total_size > 0; }
