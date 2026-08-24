@@ -73,6 +73,5 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
 }
 bool HttpHostModifier::matches(const int l4_proto, const L7Proto l7_proto) const
 {
-    std::println("proto: {} {}", (int)l7_proto, (int)L7Proto::HTTP);
-    return l7_proto == L7Proto::HTTP;
+    return l7_proto == L7Proto::HTTP && l4_proto == IPPROTO_TCP;
 }
