@@ -70,6 +70,37 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
             auto &cfed_pkt = packet;
             if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
                 std::println("Got a tls handshake");
+
+                // {
+                //     auto modifier = smth();
+                //     std::vector<PacketView> packets;
+                //
+                //     if (!conn.get_reasm_frags().empty()) {
+                //         packets = conn.get_reasm_frags();
+                //     } else {
+                //         packets.push_back(packet);
+                //     }
+                //
+                //     std::vector<PacketView> output_packets;
+                //     output_packets.reserve(packets.size());
+                //
+                //     for (auto& pkt : packets) {
+                //         modifier->process(output_packets, pkt);
+                //         // internally it may split this packet in several parts and add each one to output_packets
+                //         // but this should be later optimized, so i dont waste time on copying and so on
+                //         // first, make it work
+                //         // then, make it "right"
+                //     }
+                //
+                //     for (auto& output_pkt : output_packets) {
+                //         if (output_pkt.is_original) {
+                //             send_verdict(output_pkt.packet_id, ...);
+                //         } else {
+                //             send(...);
+                //         }
+                //     }
+                // }
+
                 conn.set_done(true);
             } else if (cfed_pkt.payload_proto == L7Proto::HTTP) {
                 if (cfed_pkt.is_payload_reasm) {
