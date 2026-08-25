@@ -22,7 +22,9 @@ add_executable(main main.cpp
         modifiers/http_host_modifier.cpp
         modifiers/http_host_modifier.hpp
         modifiers/dumbass_modifier.cpp
-        modifiers/dumbass_modifier.hpp)
+        modifiers/dumbass_modifier.hpp
+        checksum.cpp
+        checksum.hpp)
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
 target_link_libraries(

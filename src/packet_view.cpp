@@ -4,6 +4,8 @@
 
 #include "packet_view.hpp"
 
+#include <cstring>
+
 std::uint16_t PacketView::get_source_port() const
 {
     switch (network_hdr->protocol) {
@@ -97,6 +99,14 @@ Packet create_packet(const PacketView &view)
     pkt.action.packet_id = view.packet_id;
 
     return pkt;
+}
+
+Packet create_packet_from(const PacketView& pkt, std::span<const char> new_payload) {
+    Packet res = create_packet(pkt);
+    res.packet.resize(static_cast<std::size_t>(res.payload_offset) + new_payload.size());
+    std::memcpy(std::next(res.packet.data(), res.payload_offset), new_payload.data(), new_payload.size());
+    res.network_hdr()->tot_len = htons(static_cast<std::uint16_t>(pkt.network_hdr->ihl * 4 + pkt.transport_hdr_len() + new_payload.size()));
+    return res;
 }
 
 PacketView parse_packet_view(std::span<const char> packet)

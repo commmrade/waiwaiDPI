@@ -4,6 +4,8 @@
 
 #include "http_host_modifier.hpp"
 
+#include "../checksum.hpp"
+
 #include <cassert>
 #include <cstring>
 #include <print>
@@ -38,17 +40,16 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
         const std::span<const char> part1{pkt_pl.begin(), pkt_pl.begin() + host_pos + SPLIT_AT};
         const std::span<const char> part2{pkt_pl.begin() + host_pos + SPLIT_AT, pkt_pl.end()};
 
-
-        Packet first_packet = construct_packet_from(part1, pkt_view);
+        Packet first_packet = create_packet_from(pkt_view, part1);
         first_packet.action.action = PacketAction::Action::DROP_AND_SEND;
         first_packet.action.packet_id = pkt_view.packet_id;
 
         auto* tcp = static_cast<tcphdr*>(first_packet.transport_hdr());
 
         tcp->check = 0;
-        tcp->check = tcp_calc_cksum(first_packet.network_hdr(), tcp, part1);
+        tcp->check = calc_tcp_checksum(first_packet);
 
-        Packet second_packet = construct_packet_from(part2, pkt_view);
+        Packet second_packet = create_packet_from(pkt_view, part2);
         second_packet.action.action = PacketAction::Action::SEND;
         second_packet.action.packet_id = 0;
 
@@ -56,7 +57,7 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
 
         tcp->seq += htonl(part1.size());
         tcp->check = 0;
-        tcp->check = tcp_calc_cksum(second_packet.network_hdr(), tcp, part2);
+        tcp->check = calc_tcp_checksum(second_packet);
 
         // TODO: might be best to choose a different data structure
         vec.erase(vec.begin() + i);

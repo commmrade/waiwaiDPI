@@ -94,5 +94,6 @@ struct Packet
 [[nodiscard]] PacketView parse_packet_view(std::span<const char> packet);
 [[nodiscard]] PacketView parse_packet_view(const Packet &packet);
 [[nodiscard]] Packet create_packet(const PacketView& view);
+[[nodiscard]] Packet create_packet_from(const PacketView& pkt, std::span<const char> new_payload);
 
 #endif// WAIWAIDPI_PACKET_HPP
