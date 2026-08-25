@@ -3,7 +3,10 @@
 
 
 #include "consts.hpp"
+#include "modifiers/dumbass_modifier.hpp"
+#include "modifiers/http_host_modifier.hpp"
 #include "nfq.hpp"
+
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstring>
@@ -24,6 +27,8 @@ struct Context
     Classifier *classifier{ nullptr };
 
     ConnTracker *tracker{ nullptr };
+
+    int raw_sock;
 };
 
 int cb_loop(const struct nlmsghdr *nlh, void *data)
@@ -41,7 +46,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     }
 
     assert(attrs[NFQA_PACKET_HDR]);
-    const nfqnl_msg_packet_hdr *pkt_hdr =
+    const auto *pkt_hdr =
         static_cast<const nfqnl_msg_packet_hdr *>(mnl_attr_get_payload(attrs[NFQA_PACKET_HDR]));
     if (!pkt_hdr) {
         std::println(std::cerr, "No packet header");
@@ -53,7 +58,8 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     std::span<const char> const packet_buf{ static_cast<char *>(mnl_attr_get_payload(attrs[NFQA_PAYLOAD])),
         packet_len };
 
-    auto packet = parse_packet(packet_buf);
+    auto packet = parse_packet_view(packet_buf);
+    packet.packet_id = ntohl(pkt_hdr->packet_id);
 
     std::array<char, INET_ADDRSTRLEN> ip_src{};
     std::array<char, INET_ADDRSTRLEN> ip_dst{};
@@ -61,42 +67,95 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     inet_ntop(AF_INET, &packet.network_hdr->daddr, ip_dst.data(), ip_dst.size());
 
     ctx->tracker->track(packet);
-    auto &conn = ctx->tracker->get_conn(
-        packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port(), packet.network_hdr->protocol);
+    auto &conn = ctx->tracker->get_conn(packet.network_hdr->saddr,
+        packet.get_source_port(),
+        packet.network_hdr->daddr,
+        packet.get_dest_port(),
+        packet.network_hdr->protocol);
+
+    std::vector<std::unique_ptr<Modifier>> modifiers;
+    modifiers.push_back(std::make_unique<HttpHostModifier>());
+    // modifiers.push_back(std::make_unique<DumbassModifier>());
 
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
+            if (packet.payload_proto == L7Proto::TLS_HANDSHAKE) {
+                conn.set_done(true); // Avoid buffering packets after we got the CLient Hello!!!
+            }
+
             auto &cfed_pkt = packet;
-            if (cfed_pkt.payload_proto == L7Proto::TLS_HANDSHAKE) {
-                std::println("Got a tls handshake");
-                conn.set_done(true);
-            } else if (cfed_pkt.payload_proto == L7Proto::HTTP) {
-                if (cfed_pkt.is_payload_reasm) {
-                    const auto frags = conn.get_reasm_frags();
-                    conn.reset_reasm();
+            std::vector<Packet> packets;
 
-                    std::string http_req{};
+            if (cfed_pkt.is_payload_reasm) {
+                const std::vector<Packet> frags = conn.get_reasm_frags();
+                conn.reset_reasm();
 
-                    for (const auto &frag : frags) {
-                        const PacketView http_pkt = parse_packet(frag);
-                        http_req.insert(http_req.end(), http_pkt.payload.begin(), http_pkt.payload.end());
+                packets.reserve(frags.size());
+                for (const auto &frag : frags) {
+                    packets.emplace_back(frag);
+                }
+            } else {
+                packets.emplace_back(create_packet(cfed_pkt));
+            }
+
+            for (auto &modifier : modifiers) {
+                if (!modifier->matches(conn.get_l4_proto(), conn.payload_proto())) {
+                    continue;
+                }
+
+                if (!modifier->modify(packets)) {
+                }
+            }
+
+            for (const auto &send_pkt : packets) {
+                switch (send_pkt.action.action) {
+                case PacketAction::Action::ACCEPT: {
+                    assert(send_pkt.action.packet_id);
+                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_ACCEPT);
+                    if (ret < 0) {
+                        perror("send accept failed, but dont stop");
                     }
+                    break;
+                }
+                case PacketAction::Action::DROP: {
+                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_DROP);
+                    if (ret < 0) {
+                        perror("send drop failed, dont stop");
+                    }
+                    break;
+                }
+                case PacketAction::Action::DROP_AND_SEND: {
+                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_DROP);
+                    if (ret < 0) {
+                        perror("send drop failed, dont stop");
+                    }
+                    [[fallthrough]];
+                }
+                case PacketAction::Action::SEND: {
+                    const auto *ip = reinterpret_cast<const iphdr *>(send_pkt.packet.data());
 
-                    std::println(
-                        "Reassembled http request from {} frags: {}", frags.size(), std::string_view{ http_req });
-                } else {
-                    std::println("full http request: {}", std::string_view{ cfed_pkt.payload });
+                    sockaddr_in dest_addr{};
+                    dest_addr.sin_family = AF_INET;
+                    dest_addr.sin_addr.s_addr = ip->daddr;
+
+                    ssize_t const sent = sendto(ctx->raw_sock,
+                        send_pkt.packet.data(),
+                        send_pkt.packet.size(),
+                        0,
+                        reinterpret_cast<sockaddr *>(&dest_addr),
+                        sizeof(dest_addr));
+                    if (sent < 0) { perror("could not send a packet, continuing"); }
+                    break;
+                }
                 }
             }
         }
+    } else {
+        ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
+        assert(ret);
     }
 
-    ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
-    if (ret < 0) {
-        perror("send verdict");
-        return MNL_CB_ERROR;
-    }
 
     return MNL_CB_OK;
 }
@@ -104,6 +163,26 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 int main(int argc, char *argv[])
 {
     int ret = 0;
+
+    int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (raw_sock < 0) {
+        perror("socket");
+        return EXIT_FAILURE;
+    }
+
+    int enable = 1;
+    ret = setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &enable, sizeof(enable));
+    if (ret < 0) {
+        perror("setsockopt");
+        return EXIT_FAILURE;
+    }
+
+    int mark = 0x14;
+    ret = setsockopt(raw_sock, SOL_SOCKET, SO_MARK, &mark, sizeof(mark));
+    if (ret < 0) {
+        perror("setsockopt");
+        return EXIT_FAILURE;
+    }
 
     mnl_socket *socket = mnl_socket_open(NETLINK_NETFILTER);
     if (!socket) {
@@ -155,6 +234,7 @@ int main(int argc, char *argv[])
     ctx.sock = socket;
     ctx.classifier = &cfier;
     ctx.tracker = &tracker;
+    ctx.raw_sock = raw_sock;
 
     auto last_check_time = std::chrono::system_clock::now();
 
@@ -184,74 +264,3 @@ int main(int argc, char *argv[])
     return EXIT_SUCCESS;
 }
 
-
-// std::string test_get_sni(std::span<const char> payload)
-// {
-//     std::println("payloiad!!!!: {}", payload.size());
-//     if (payload.size() < 10) {
-//         return {};
-//     }
-//
-//     payload = payload.subspan(5);; // skip intro
-//
-//     constexpr int CLIENT_HELLO_TYPE = 0x01;
-//     assert(*payload.data() == CLIENT_HELLO_TYPE);
-//     payload = payload.subspan(1);
-//
-//     std::uint32_t ch_len{};
-//     std::memcpy(std::next(reinterpret_cast<char*>(&ch_len), 1), payload.data(), 3);
-//     ch_len = ntohl(ch_len);
-//     payload = payload.subspan(3);
-//     std::println("CH LEN: {}", ch_len);
-//
-//     payload = payload.subspan(34);
-//
-//     std::uint8_t const leg_ses_id_len = *payload.data();
-//     payload = payload.subspan(leg_ses_id_len + 1);
-//
-//     std::uint16_t cip_suit_len{};
-//     std::memcpy(&cip_suit_len, payload.data(), sizeof(cip_suit_len));
-//     cip_suit_len = ntohs(cip_suit_len);
-//     payload = payload.subspan(sizeof(cip_suit_len) + cip_suit_len);
-//
-//     std::uint8_t const compression_methods_len = *payload.data();
-//     payload = payload.subspan(1 + compression_methods_len); // ✅
-//
-//     std::uint16_t ext_length{};
-//     std::memcpy(&ext_length, payload.data(), sizeof(ext_length));
-//     ext_length = ntohs(ext_length);
-//     payload = payload.subspan(sizeof(ext_length), ext_length);
-//
-//     while (!payload.empty()) {
-//         std::uint16_t ext_type{};
-//         std::memcpy(&ext_type, payload.data(), sizeof(ext_type));
-//         ext_type = ntohs(ext_type);
-//         payload = payload.subspan(sizeof(ext_type));
-//
-//         std::uint16_t ext_len{};
-//         std::memcpy(&ext_len, payload.data(), sizeof(ext_len));
-//         ext_len = ntohs(ext_len);
-//         payload = payload.subspan(sizeof(ext_len));
-//
-//         if (ext_type != 0x00) {
-//             payload = payload.subspan(ext_len);
-//             continue;
-//         }
-//
-//         // contains server name list
-//         // skip serve rname list len
-//         payload = payload.subspan(2);
-//
-//         assert(*payload.data() == 0x00);
-//         payload = payload.subspan(1);
-//
-//         std::uint16_t hostname_len{};
-//         std::memcpy(&hostname_len, payload.data(), sizeof(hostname_len));
-//         hostname_len = ntohs(hostname_len);
-//         payload = payload.subspan(sizeof(hostname_len));
-//
-//         return std::string{payload.data(), hostname_len};
-//     }
-//
-//     return {};
-// }

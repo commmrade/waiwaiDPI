@@ -17,7 +17,14 @@ add_executable(main main.cpp
         classifiers/http_classifier.hpp
         classifiers/payload_classifier.hpp
         classifiers/tls_classifier.cpp
-        classifiers/tls_classifier.hpp)
+        classifiers/tls_classifier.hpp
+        modifiers/modifier.hpp
+        modifiers/http_host_modifier.cpp
+        modifiers/http_host_modifier.hpp
+        modifiers/dumbass_modifier.cpp
+        modifiers/dumbass_modifier.hpp
+        checksum.cpp
+        checksum.hpp)
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
 target_link_libraries(
