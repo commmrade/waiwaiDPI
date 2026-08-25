@@ -54,25 +54,10 @@ static std::uint16_t tcp_calc_cksum(const iphdr* ip, const tcphdr* tcp, std::spa
 }
 
 static Packet construct_packet_from(std::span<const char> payload, const PacketView& pkt) {
-    Packet res;
-    res.packet.resize(payload.size() + (pkt.network_hdr->ihl * 4) + pkt.transport_hdr_len());
-
-    char* ptr = res.packet.data();
-    iphdr* ip = reinterpret_cast<iphdr*>(ptr);
-
-    const std::size_t ip_hdr_size = pkt.network_hdr->ihl * 4;
-    std::memcpy(ip, pkt.network_hdr, ip_hdr_size);
-    ptr += ip_hdr_size;
-
-    tcphdr* tcp = reinterpret_cast<tcphdr*>(ptr);
-    const std::size_t tcp_hdr_size = pkt.transport_hdr_len();
-    std::memcpy(tcp, std::get<const tcphdr*>(pkt.transport_hdr), tcp_hdr_size);
-    ptr += tcp_hdr_size;
-
-    std::memcpy(ptr, payload.data(), payload.size());
-
-    ip->tot_len = htons(pkt.network_hdr->ihl * 4 + pkt.transport_hdr_len() + payload.size());
-
+    Packet res = create_packet(pkt);
+    res.packet.resize(res.payload_offset + payload.size());
+    std::memcpy(res.packet.data() + res.payload_offset, payload.data(), payload.size());
+    res.network_hdr()->tot_len = htons(pkt.network_hdr->ihl * 4 + pkt.transport_hdr_len() + payload.size());
     return res;
 }
 

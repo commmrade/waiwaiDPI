@@ -31,7 +31,7 @@ ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
         std::string full_http;
         full_http.reserve(conn.get_reasm_pos());
         for (const auto &frag : conn.get_reasm_frags()) {
-            const PacketView pkt_frag = parse_packet(frag);
+            const PacketView pkt_frag = parse_packet_view(frag);
             full_http.insert(
                 full_http.end(), frag.packet.begin() + static_cast<std::ptrdiff_t>((pkt_frag.network_hdr->ihl * 4) + pkt_frag.transport_hdr_len()), frag.packet.end());
         }

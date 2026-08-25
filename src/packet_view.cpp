@@ -69,8 +69,37 @@ std::size_t PacketView::transport_hdr_len() const
     }
     }
 }
+Packet create_packet(const PacketView &view)
+{
+    Packet pkt;
+    pkt.packet.insert(pkt.packet.end(), view.packet.begin(), view.packet.end());
 
-PacketView parse_packet(std::span<const char> packet)
+    auto *iph = reinterpret_cast<iphdr *>(pkt.packet.data());// NOLINT
+    pkt.network_offset = 0;
+    pkt.transport_offset = iph->ihl * 4;
+    switch (iph->protocol) {
+    case IPPROTO_TCP: {
+        const auto* tcp = reinterpret_cast<const tcphdr*>(std::next(pkt.packet.data(), pkt.transport_offset));
+        pkt.payload_offset = (iph->ihl * 4) + (tcp->doff * 4);
+        break;
+    }
+    case IPPROTO_UDP: {
+        const auto *udph = reinterpret_cast<const udphdr *>(std::next(pkt.packet.data(), pkt.transport_offset));// NOLINT
+        pkt.payload_offset = (iph->ihl * 4) + sizeof(udphdr);
+        break;
+    }
+    default: {
+        throw std::runtime_error("This transport layer protocol is not supported. How?");
+    }
+    }
+
+    pkt.payload_proto = view.payload_proto;
+    pkt.action.packet_id = view.packet_id;
+
+    return pkt;
+}
+
+PacketView parse_packet_view(std::span<const char> packet)
 {
     PacketView pkt;
     pkt.packet = packet;
@@ -101,24 +130,21 @@ PacketView parse_packet(std::span<const char> packet)
     return pkt;
 }
 
-PacketView parse_packet(const Packet &packet)
+PacketView parse_packet_view(const Packet &packet)
 {
     PacketView pkt;
     pkt.packet = packet.packet;
     pkt.packet_id = packet.action.packet_id;
 
-    const auto *iph = reinterpret_cast<const iphdr *>(packet.packet.data());// NOLINT
-    pkt.network_hdr = iph;
+    pkt.network_hdr = packet.network_hdr();
 
-    switch (iph->protocol) {
+    switch (pkt.network_hdr->protocol) {
     case IPPROTO_TCP: {
-        const auto *tcph = reinterpret_cast<const tcphdr *>(std::next(packet.packet.data(), iph->ihl * 4));// NOLINT
-        pkt.transport_hdr.emplace<const tcphdr *>(tcph);
+        pkt.transport_hdr.emplace<const tcphdr *>(static_cast<const tcphdr*>(packet.transport_hdr()));
         break;
     }
     case IPPROTO_UDP: {
-        const auto *udph = reinterpret_cast<const udphdr *>(std::next(packet.packet.data(), iph->ihl * 4));// NOLINT
-        pkt.transport_hdr.emplace<const udphdr *>(udph);
+        pkt.transport_hdr.emplace<const udphdr *>(static_cast<const udphdr*>(packet.transport_hdr()));
         break;
     }
     default: {
@@ -127,8 +153,8 @@ PacketView parse_packet(const Packet &packet)
     }
 
     const auto headers_len = (pkt.network_hdr->ihl * 4) + (pkt.transport_hdr_len());
-    pkt.payload = std::span<const char>{ std::next(packet.packet.data(), static_cast<std::ptrdiff_t>(headers_len)),
-        packet.packet.size() - headers_len };
+    pkt.payload_proto = packet.payload_proto;
+    pkt.payload = packet.payload();
 
     return pkt;
 }

@@ -56,15 +56,43 @@ struct Packet
 {
     std::vector<char> packet;
 
+    std::ptrdiff_t network_offset{0};
+    std::ptrdiff_t transport_offset;
+    L7Proto payload_proto{ L7Proto::UNKNOWN };
+    std::ptrdiff_t payload_offset;
+
     PacketAction action{ .packet_id = 0, .action = PacketAction::Action::SEND };
 
-    Packet() = default;
-    explicit Packet(const PacketView &view)
-        : packet(view.packet.begin(), view.packet.end()), action(view.packet_id, PacketAction::Action::ACCEPT)
-    {}
+    iphdr* network_hdr()
+    {
+        return reinterpret_cast<iphdr*>(std::next(packet.data(), network_offset));
+    }
+    [[nodiscard]] const iphdr* network_hdr() const
+    {
+        return reinterpret_cast<const iphdr*>(std::next(packet.data(), network_offset));
+    }
+    void* transport_hdr()
+    {
+        return static_cast<void*>(std::next(packet.data(), transport_offset));
+    }
+    [[nodiscard]] const void* transport_hdr() const
+    {
+        return static_cast<const void*>(std::next(packet.data(), transport_offset));
+    }
+    std::span<char> payload()
+    {
+        std::span<char> const packet_span{packet};
+        return packet_span.subspan(static_cast<std::size_t>(payload_offset));
+    }
+    [[nodiscard]] std::span<const char> payload() const
+    {
+        std::span<const char> const packet_span{packet};
+        return packet_span.subspan(static_cast<std::size_t>(payload_offset));
+    }
 };
 
-[[nodiscard]] PacketView parse_packet(std::span<const char> packet);
-[[nodiscard]] PacketView parse_packet(const Packet &packet);
+[[nodiscard]] PacketView parse_packet_view(std::span<const char> packet);
+[[nodiscard]] PacketView parse_packet_view(const Packet &packet);
+[[nodiscard]] Packet create_packet(const PacketView& view);
 
 #endif// WAIWAIDPI_PACKET_HPP

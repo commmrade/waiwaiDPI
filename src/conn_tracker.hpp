@@ -63,7 +63,7 @@ public:
 
     void reset_reasm();
 
-    void add_reasm_frag(const PacketView& pkt) { reasm_.frags.emplace_back(pkt); }
+    void add_reasm_frag(const PacketView& pkt) { reasm_.frags.emplace_back(create_packet(pkt)); }
     [[nodiscard]] const std::vector<Packet> &get_reasm_frags() const { return reasm_.frags; }
     [[nodiscard]] std::size_t get_reasm_pos() const { return reasm_.pos; }
     void set_reasm_pos(const std::size_t pos) { reasm_.pos = pos; }

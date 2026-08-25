@@ -46,7 +46,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     }
 
     assert(attrs[NFQA_PACKET_HDR]);
-    const nfqnl_msg_packet_hdr *pkt_hdr =
+    const auto *pkt_hdr =
         static_cast<const nfqnl_msg_packet_hdr *>(mnl_attr_get_payload(attrs[NFQA_PACKET_HDR]));
     if (!pkt_hdr) {
         std::println(std::cerr, "No packet header");
@@ -58,7 +58,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     std::span<const char> const packet_buf{ static_cast<char *>(mnl_attr_get_payload(attrs[NFQA_PAYLOAD])),
         packet_len };
 
-    auto packet = parse_packet(packet_buf);
+    auto packet = parse_packet_view(packet_buf);
     packet.packet_id = ntohl(pkt_hdr->packet_id);
 
     std::array<char, INET_ADDRSTRLEN> ip_src{};
@@ -75,7 +75,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
     std::vector<std::unique_ptr<Modifier>> modifiers;
     modifiers.push_back(std::make_unique<HttpHostModifier>());
-    modifiers.push_back(std::make_unique<DumbassModifier>());
+    // modifiers.push_back(std::make_unique<DumbassModifier>());
 
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
@@ -84,17 +84,17 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
             std::vector<Packet> packets;
 
             if (cfed_pkt.is_payload_reasm) {
-                const auto frags = conn.get_reasm_frags();
+                const std::vector<Packet> frags = conn.get_reasm_frags();
                 conn.reset_reasm();
 
                 packets.reserve(frags.size());
                 for (const auto &frag : frags) {
-                    PacketView pkt_v = parse_packet(frag);
+                    PacketView pkt_v = parse_packet_view(frag);
                     pkt_v.payload_proto = cfed_pkt.payload_proto;
-                    packets.emplace_back(pkt_v);
+                    packets.emplace_back(create_packet(pkt_v));
                 }
             } else {
-                packets.emplace_back(cfed_pkt);
+                packets.emplace_back(create_packet(cfed_pkt));
             }
 
             for (auto &modifier : modifiers) {
@@ -128,7 +128,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                     if (ret < 0) {
                         perror("send drop failed, dont stop");
                     }
-                    std::println("AFTER DROP AND SEND");
                     [[fallthrough]];
                 }
                 case PacketAction::Action::SEND: {
