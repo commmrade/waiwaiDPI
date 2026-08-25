@@ -80,6 +80,10 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
+            if (packet.payload_proto == L7Proto::TLS_HANDSHAKE) {
+                conn.set_done(true); // Avoid buffering packets after we got the CLient Hello!!!
+            }
+
             auto &cfed_pkt = packet;
             std::vector<Packet> packets;
 
@@ -89,9 +93,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
                 packets.reserve(frags.size());
                 for (const auto &frag : frags) {
-                    PacketView pkt_v = parse_packet_view(frag);
-                    pkt_v.payload_proto = cfed_pkt.payload_proto;
-                    packets.emplace_back(create_packet(pkt_v));
+                    packets.emplace_back(frag);
                 }
             } else {
                 packets.emplace_back(create_packet(cfed_pkt));
@@ -153,6 +155,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
         assert(ret);
     }
+
 
     return MNL_CB_OK;
 }

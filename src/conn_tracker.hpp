@@ -109,6 +109,14 @@ public:
         const std::uint32_t daddr,
         const std::uint16_t dest,
         const int proto);
+    std::size_t count() const
+    {
+        return conns_.size();
+    }
+    auto& conns()
+    {
+        return conns_;
+    }
 };
 
 #endif// WAIWAIDPI_CONN_TRACKER_HPP

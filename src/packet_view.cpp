@@ -97,6 +97,9 @@ Packet create_packet(const PacketView &view)
 
     pkt.payload_proto = view.payload_proto;
     pkt.action.packet_id = view.packet_id;
+    if (pkt.action.packet_id) {
+        pkt.action.action = PacketAction::Action::ACCEPT;
+    }
 
     return pkt;
 }
