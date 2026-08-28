@@ -111,8 +111,8 @@ TEST_CASE("SYN state is determined correctly", "[tcp_conntrack]")
         /*fin=*/false,
         /*rst=*/false);
 
-    const PacketView syn_pkt = parse_packet(std::span<const char>{ reinterpret_cast<const char *>(syn_buf), syn_len });
-    const PacketView ack_pkt = parse_packet(std::span<const char>(reinterpret_cast<const char *>(ack_buf), ack_len));
+    const PacketView syn_pkt = parse_packet_view(std::span<const char>{ reinterpret_cast<const char *>(syn_buf), syn_len });
+    const PacketView ack_pkt = parse_packet_view(std::span<const char>(reinterpret_cast<const char *>(ack_buf), ack_len));
 
     ConnTracker tracker{};
     tracker.track(syn_pkt);
@@ -167,8 +167,8 @@ TEST_CASE("SYN state determination fails", "[tcp_conntrack]")
         /*fin=*/false,
         /*rst=*/false);
 
-    const PacketView syn_pkt = parse_packet(std::span<const char>{ reinterpret_cast<const char *>(syn_buf), syn_len });
-    const PacketView ack_pkt = parse_packet(std::span<const char>(reinterpret_cast<const char *>(ack_buf), ack_len));
+    const PacketView syn_pkt = parse_packet_view(std::span<const char>{ reinterpret_cast<const char *>(syn_buf), syn_len });
+    const PacketView ack_pkt = parse_packet_view(std::span<const char>(reinterpret_cast<const char *>(ack_buf), ack_len));
 
     ConnTracker tracker{};
     tracker.track(syn_pkt);
@@ -228,9 +228,9 @@ TEST_CASE("SYN-ACK state is determined correctly (server side)", "[tcp_conntrack
         sizeof(payload) - 1);
 
     const PacketView synack_pkt =
-        parse_packet(std::span<const char>{ reinterpret_cast<const char *>(synack_buf), synack_len });
+        parse_packet_view(std::span<const char>{ reinterpret_cast<const char *>(synack_buf), synack_len });
     const PacketView data_pkt =
-        parse_packet(std::span<const char>{ reinterpret_cast<const char *>(data_buf), data_len });
+        parse_packet_view(std::span<const char>{ reinterpret_cast<const char *>(data_buf), data_len });
 
     ConnTracker tracker;
 
@@ -291,8 +291,8 @@ TEST_CASE("FIN close sequence is determined correctly (client side)", "[tcp_conn
         /*fin=*/false,
         /*rst=*/false);
 
-    const PacketView syn_pkt = parse_packet(std::span<const char>{ reinterpret_cast<const char *>(syn_buf), syn_len });
-    const PacketView ack_pkt = parse_packet(std::span<const char>(reinterpret_cast<const char *>(ack_buf), ack_len));
+    const PacketView syn_pkt = parse_packet_view(std::span<const char>{ reinterpret_cast<const char *>(syn_buf), syn_len });
+    const PacketView ack_pkt = parse_packet_view(std::span<const char>(reinterpret_cast<const char *>(ack_buf), ack_len));
 
     // Client sends FIN. FIN consumes one sequence number.
     uint8_t fin_buf[128];
@@ -328,9 +328,9 @@ TEST_CASE("FIN close sequence is determined correctly (client side)", "[tcp_conn
         /*fin=*/false,
         /*rst=*/false);
 
-    const PacketView fin_pkt = parse_packet(std::span<const char>{ reinterpret_cast<const char *>(fin_buf), fin_len });
+    const PacketView fin_pkt = parse_packet_view(std::span<const char>{ reinterpret_cast<const char *>(fin_buf), fin_len });
     const PacketView final_ack_pkt =
-        parse_packet(std::span<const char>{ reinterpret_cast<const char *>(final_ack_buf), final_ack_len });
+        parse_packet_view(std::span<const char>{ reinterpret_cast<const char *>(final_ack_buf), final_ack_len });
 
     ConnTracker tracker;
     tracker.track(syn_pkt);
@@ -378,7 +378,7 @@ TEST_CASE("RST immediately terminates the connection (client side)", "[tcp_connt
     // even if the tracker sees stray packets after this, it should have
     // already torn down / invalidated the connection state.
 
-    const PacketView rst_pkt = parse_packet(std::span<const char>{ reinterpret_cast<const char *>(rst_buf), rst_len });
+    const PacketView rst_pkt = parse_packet_view(std::span<const char>{ reinterpret_cast<const char *>(rst_buf), rst_len });
 
     ConnTracker tracker;
     tracker.track(rst_pkt);

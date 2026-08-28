@@ -81,9 +81,8 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
             if (packet.payload_proto == L7Proto::TLS_HANDSHAKE) {
-                conn.set_done(true); // Avoid buffering packets after we got the CLient Hello!!!
+                conn.set_done(true);
             }
-
             auto &cfed_pkt = packet;
             std::vector<Packet> packets;
 
@@ -103,7 +102,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 if (!modifier->matches(conn.get_l4_proto(), conn.payload_proto())) {
                     continue;
                 }
-
                 if (!modifier->modify(packets)) {
                 }
             }

@@ -24,7 +24,7 @@ public:
 
 TEST_CASE_METHOD(TlsTestFixture, "Full TLS is classified correctly", "[tls_classifier]")
 {
-    PacketView pkt = parse_packet(packet);
+    PacketView pkt = parse_packet_view(packet);
     tracker.track(pkt);
     auto res = classifier.classify(pkt);
     REQUIRE(res == ParseResult::SUCCESS);
@@ -66,8 +66,8 @@ TEST_CASE_METHOD(TlsTestFixture, "Split TLS is classified correctly", "[tls_clas
 
     std::vector<char> second_packet = construct_packet_from(second_fragment_payload, ip, tcp_second);
 
-    PacketView first_pkt = parse_packet(first_packet);
-    PacketView second_pkt = parse_packet(second_packet);
+    PacketView first_pkt = parse_packet_view(first_packet);
+    PacketView second_pkt = parse_packet_view(second_packet);
 
     tracker.track(first_pkt);
 
