@@ -13,61 +13,33 @@ static unsigned char full_http_req_case[] = {0x45, 0x0, 0x0, 0x83, 0x5a, 0x67, 0
 static unsigned char split_http_req_1[] = {0x45, 0x0, 0x0, 0x5b, 0x9d, 0x8a, 0x40, 0x0, 0x40, 0x6, 0xaa, 0xa, 0xc0, 0xa8, 0x1, 0xa9, 0xac, 0x43, 0x84, 0x73, 0x85, 0x20, 0x0, 0x50, 0x23, 0x3b, 0x2e, 0x1e, 0x82, 0x69, 0xde, 0x87, 0x80, 0x18, 0x0, 0x3f, 0xf3, 0x55, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0x64, 0x5d, 0xcc, 0xe3, 0xb8, 0x55, 0x8b, 0x6b, 0x47, 0x45, 0x54, 0x20, 0x2f, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f, 0x31, 0x2e, 0x31, 0xd, 0xa, 0x48, 0x6f, 0x73, 0x74, 0x3a, 0x20, 0x68, 0x74, 0x74, 0x70, 0x66, 0x6f, 0x72, 0x65, 0x76, 0x65, 0x72, 0x2e, 0x63, 0x6f, 0x6d, 0xd, 0xa};
 static unsigned char split_http_req_2[] = {0x45, 0x0, 0x0, 0x5c, 0x9d, 0x8b, 0x40, 0x0, 0x40, 0x6, 0xaa, 0x8, 0xc0, 0xa8, 0x1, 0xa9, 0xac, 0x43, 0x84, 0x73, 0x85, 0x20, 0x0, 0x50, 0x23, 0x3b, 0x2e, 0x45, 0x82, 0x69, 0xde, 0x87, 0x80, 0x18, 0x0, 0x3f, 0xf3, 0x56, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0x64, 0x5d, 0xce, 0x48, 0xb8, 0x55, 0x8b, 0xef, 0x55, 0x73, 0x65, 0x72, 0x2d, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x3a, 0x20, 0x63, 0x75, 0x72, 0x6c, 0x2f, 0x38, 0x2e, 0x32, 0x31, 0x2e, 0x30, 0xd, 0xa, 0x41, 0x63, 0x63, 0x65, 0x70, 0x74, 0x3a, 0x20, 0x2a, 0x2f, 0x2a, 0xd, 0xa, 0xd, 0xa};
 
-TEST_CASE("Whole HTTP request is split at Host header", "[http_modifier]")
+class HttpModifierTestFixture
 {
-    std::span<const char> packet{reinterpret_cast<const char*>(full_http_req), sizeof(full_http_req)};
-    PacketView pkt = parse_packet_view(packet);
-    std::string_view pkt_payload{pkt.payload};
-    REQUIRE(pkt_payload.find("httpforever.com") != std::string_view::npos);
-
-    ConnTracker tracker{};
+protected:
+    ConnTracker tracker;
     Classifier classifier{tracker};
-    classifier.add(std::make_unique<HttpClassifier>());
     HttpHostModifier modifier;
 
-    tracker.track(pkt);
-    auto res = classifier.classify(pkt);
-
-    REQUIRE(res == ParseResult::SUCCESS);
-
     std::vector<Packet> packets;
-    packets.emplace_back(create_packet(pkt));
+public:
+    HttpModifierTestFixture()
+    {
+        classifier.add(std::make_unique<HttpClassifier>());
+    }
+};
 
-    REQUIRE(pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE(modifier.matches(IPPROTO_TCP, pkt.payload_proto));
-    REQUIRE(modifier.modify(packets));
-
-    auto& pkt_1 = packets[0];
-    REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
-    std::string_view pkt_1_payload{pkt_1.payload()};
-    REQUIRE(pkt_1_payload.find("httpforever.com") == std::string_view::npos);
-    REQUIRE(pkt_1.payload_proto == L7Proto::HTTP);
-
-    auto& pkt_2 = packets[1];
-    REQUIRE(pkt_2.action.action == PacketAction::Action::SEND);
-    std::string_view pkt_2_payload{pkt_2.payload()};
-    REQUIRE(pkt_2_payload.find("httpforever.com") == std::string_view::npos);
-    REQUIRE(pkt_2.payload_proto == L7Proto::HTTP);
-}
-
-TEST_CASE("Case Insensitive searchf or Host Header", "[http_modifier]")
+TEST_CASE_METHOD(HttpModifierTestFixture, "Whole HTTP request is split at Host header", "[http_modifier]")
 {
-    std::span<const char> const packet{reinterpret_cast<const char*>(full_http_req_case), sizeof(full_http_req_case)};
+    std::span<const char> const packet{reinterpret_cast<const char*>(full_http_req), sizeof(full_http_req)};
     PacketView pkt = parse_packet_view(packet);
     std::string_view const pkt_payload{pkt.payload};
     REQUIRE(pkt_payload.find("httpforever.com") != std::string_view::npos);
 
-    ConnTracker tracker{};
-    Classifier classifier{tracker};
-    classifier.add(std::make_unique<HttpClassifier>());
-    HttpHostModifier modifier;
-
     tracker.track(pkt);
     auto res = classifier.classify(pkt);
 
     REQUIRE(res == ParseResult::SUCCESS);
 
-    std::vector<Packet> packets;
     packets.emplace_back(create_packet(pkt));
 
     REQUIRE(pkt.payload_proto == L7Proto::HTTP);
@@ -87,24 +59,50 @@ TEST_CASE("Case Insensitive searchf or Host Header", "[http_modifier]")
     REQUIRE(pkt_2.payload_proto == L7Proto::HTTP);
 }
 
-TEST_CASE("Split HTTP request is correctly separated at Host header", "[http_modifier]")
+TEST_CASE_METHOD(HttpModifierTestFixture, "Case Insensitive searchf or Host Header", "[http_modifier]")
 {
-    std::span<const char> packet1{reinterpret_cast<const char*>(split_http_req_1), sizeof(split_http_req_1)};
+    std::span<const char> const packet{reinterpret_cast<const char*>(full_http_req_case), sizeof(full_http_req_case)};
+    PacketView pkt = parse_packet_view(packet);
+    std::string_view const pkt_payload{pkt.payload};
+    REQUIRE(pkt_payload.find("httpforever.com") != std::string_view::npos);
+
+    tracker.track(pkt);
+    auto res = classifier.classify(pkt);
+
+    REQUIRE(res == ParseResult::SUCCESS);
+
+    packets.emplace_back(create_packet(pkt));
+
+    REQUIRE(pkt.payload_proto == L7Proto::HTTP);
+    REQUIRE(modifier.matches(IPPROTO_TCP, pkt.payload_proto));
+    REQUIRE(modifier.modify(packets));
+
+    auto& pkt_1 = packets[0];
+    REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
+    std::string_view const pkt_1_payload{pkt_1.payload()};
+    REQUIRE(pkt_1_payload.find("httpforever.com") == std::string_view::npos);
+    REQUIRE(pkt_1.payload_proto == L7Proto::HTTP);
+
+    auto& pkt_2 = packets[1];
+    REQUIRE(pkt_2.action.action == PacketAction::Action::SEND);
+    std::string_view const pkt_2_payload{pkt_2.payload()};
+    REQUIRE(pkt_2_payload.find("httpforever.com") == std::string_view::npos);
+    REQUIRE(pkt_2.payload_proto == L7Proto::HTTP);
+}
+
+TEST_CASE_METHOD(HttpModifierTestFixture, "Split HTTP request is correctly separated at Host header", "[http_modifier]")
+{
+    std::span<const char> const packet1{reinterpret_cast<const char*>(split_http_req_1), sizeof(split_http_req_1)};
     // Contains host header
     PacketView pkt1 = parse_packet_view(packet1);
-    std::string_view packet1_payload{pkt1.payload};
+    std::string_view const packet1_payload{pkt1.payload};
     REQUIRE(packet1_payload.find("httpforever.com") != std::string_view::npos);
 
-    std::span<const char> packet2{reinterpret_cast<const char*>(split_http_req_2), sizeof(split_http_req_2)};
+    std::span<const char> const packet2{reinterpret_cast<const char*>(split_http_req_2), sizeof(split_http_req_2)};
     // Contains the rest of http request
     PacketView pkt2 = parse_packet_view(packet2);
-    std::string_view packet2_payload{pkt2.payload};
+    std::string_view const packet2_payload{pkt2.payload};
     REQUIRE(packet2_payload.find("httpforever.com") == std::string_view::npos);
-
-    ConnTracker tracker{};
-    Classifier classifier{tracker};
-    classifier.add(std::make_unique<HttpClassifier>());
-    HttpHostModifier modifier;
 
     tracker.track(pkt1);
     auto res = classifier.classify(pkt1);
@@ -114,7 +112,6 @@ TEST_CASE("Split HTTP request is correctly separated at Host header", "[http_mod
     res = classifier.classify(pkt2);
     REQUIRE(res == ParseResult::SUCCESS);
 
-    std::vector<Packet> packets;
     packets.push_back(create_packet(pkt1));
     packets.push_back(create_packet(pkt2));
 
@@ -124,48 +121,43 @@ TEST_CASE("Split HTTP request is correctly separated at Host header", "[http_mod
 
     auto& pkt_1 = packets[0];
     REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
-    std::string_view pkt_1_payload{pkt_1.payload()};
+    std::string_view const pkt_1_payload{pkt_1.payload()};
     REQUIRE(pkt_1_payload.find("httpforever.com") == std::string_view::npos);
 
     auto& pkt_2 = packets[1];
     REQUIRE(pkt_2.action.action == PacketAction::Action::SEND);
-    std::string_view pkt_2_payload{pkt_2.payload()};
+    std::string_view const pkt_2_payload{pkt_2.payload()};
     REQUIRE(pkt_2_payload.find("httpforever.com") == std::string_view::npos);
 
     auto& pkt_3 = packets[2];
     REQUIRE(pkt_3.action.action == PacketAction::Action::ACCEPT);
-    std::string_view pkt_3_payload{pkt_3.payload()};
+    std::string_view const pkt_3_payload{pkt_3.payload()};
     REQUIRE(pkt_3_payload.find("httpforever.com") == std::string_view::npos);
 }
 
-unsigned char http_packet_part_1[] = {0x45, 0x0, 0x0, 0x46, 0x97, 0xa8, 0x40, 0x0, 0x40, 0x6, 0xb0, 0x1, 0xc0, 0xa8, 0x1, 0xa9, 0xac, 0x43, 0x84, 0x73, 0x8c, 0xde, 0x0, 0x50, 0x40, 0x12, 0x12, 0xad, 0xbb, 0x5f, 0xfc, 0x1f, 0x80, 0x18, 0x0, 0x3f, 0xf3, 0x40, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0xc2, 0x13, 0x1d, 0xe4, 0x6b, 0xe4, 0x2d, 0xf0, 0x47, 0x45, 0x54, 0x20, 0x2f, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f, 0x31, 0x2e, 0x31, 0xd, 0xa, 0x48, 0x6f};
-unsigned char http_packet_part_2[] = {0x45, 0x0, 0x0, 0x43, 0x97, 0xa9, 0x40, 0x0, 0x40, 0x6, 0xb0, 0x3, 0xc0, 0xa8, 0x1, 0xa9, 0xac, 0x43, 0x84, 0x73, 0x8c, 0xde, 0x0, 0x50, 0x40, 0x12, 0x12, 0xbf, 0xbb, 0x5f, 0xfc, 0x1f, 0x80, 0x18, 0x0, 0x3f, 0xf3, 0x3d, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0xc2, 0x13, 0x1f, 0xd9, 0x6b, 0xe4, 0x2e, 0x77, 0x73, 0x74, 0x3a, 0x20, 0x68, 0x74, 0x74, 0x70, 0x66, 0x6f, 0x72, 0x65, 0x76, 0x65, 0x72};
-unsigned char http_packet_part_3[] = {0x45, 0x0, 0x0, 0x62, 0x97, 0xaa, 0x40, 0x0, 0x40, 0x6, 0xaf, 0xe3, 0xc0, 0xa8, 0x1, 0xa9, 0xac, 0x43, 0x84, 0x73, 0x8c, 0xde, 0x0, 0x50, 0x40, 0x12, 0x12, 0xce, 0xbb, 0x5f, 0xfc, 0x1f, 0x80, 0x18, 0x0, 0x3f, 0xf3, 0x5c, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0xc2, 0x13, 0x21, 0xcd, 0x6b, 0xe4, 0x30, 0x6b, 0x2e, 0x63, 0x6f, 0x6d, 0xd, 0xa, 0x55, 0x73, 0x65, 0x72, 0x2d, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x3a, 0x20, 0x63, 0x75, 0x72, 0x6c, 0x2f, 0x38, 0x2e, 0x32, 0x31, 0x2e, 0x30, 0xd, 0xa, 0x41, 0x63, 0x63, 0x65, 0x70, 0x74, 0x3a, 0x20, 0x2a, 0x2f, 0x2a, 0xd, 0xa, 0xd, 0xa};
+static unsigned char http_packet_part_1[] = {0x45, 0x0, 0x0, 0x46, 0x97, 0xa8, 0x40, 0x0, 0x40, 0x6, 0xb0, 0x1, 0xc0, 0xa8, 0x1, 0xa9, 0xac, 0x43, 0x84, 0x73, 0x8c, 0xde, 0x0, 0x50, 0x40, 0x12, 0x12, 0xad, 0xbb, 0x5f, 0xfc, 0x1f, 0x80, 0x18, 0x0, 0x3f, 0xf3, 0x40, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0xc2, 0x13, 0x1d, 0xe4, 0x6b, 0xe4, 0x2d, 0xf0, 0x47, 0x45, 0x54, 0x20, 0x2f, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f, 0x31, 0x2e, 0x31, 0xd, 0xa, 0x48, 0x6f};
+static unsigned char http_packet_part_2[] = {0x45, 0x0, 0x0, 0x43, 0x97, 0xa9, 0x40, 0x0, 0x40, 0x6, 0xb0, 0x3, 0xc0, 0xa8, 0x1, 0xa9, 0xac, 0x43, 0x84, 0x73, 0x8c, 0xde, 0x0, 0x50, 0x40, 0x12, 0x12, 0xbf, 0xbb, 0x5f, 0xfc, 0x1f, 0x80, 0x18, 0x0, 0x3f, 0xf3, 0x3d, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0xc2, 0x13, 0x1f, 0xd9, 0x6b, 0xe4, 0x2e, 0x77, 0x73, 0x74, 0x3a, 0x20, 0x68, 0x74, 0x74, 0x70, 0x66, 0x6f, 0x72, 0x65, 0x76, 0x65, 0x72};
+static unsigned char http_packet_part_3[] = {0x45, 0x0, 0x0, 0x62, 0x97, 0xaa, 0x40, 0x0, 0x40, 0x6, 0xaf, 0xe3, 0xc0, 0xa8, 0x1, 0xa9, 0xac, 0x43, 0x84, 0x73, 0x8c, 0xde, 0x0, 0x50, 0x40, 0x12, 0x12, 0xce, 0xbb, 0x5f, 0xfc, 0x1f, 0x80, 0x18, 0x0, 0x3f, 0xf3, 0x5c, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0xc2, 0x13, 0x21, 0xcd, 0x6b, 0xe4, 0x30, 0x6b, 0x2e, 0x63, 0x6f, 0x6d, 0xd, 0xa, 0x55, 0x73, 0x65, 0x72, 0x2d, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x3a, 0x20, 0x63, 0x75, 0x72, 0x6c, 0x2f, 0x38, 0x2e, 0x32, 0x31, 0x2e, 0x30, 0xd, 0xa, 0x41, 0x63, 0x63, 0x65, 0x70, 0x74, 0x3a, 0x20, 0x2a, 0x2f, 0x2a, 0xd, 0xa, 0xd, 0xa};
 
-TEST_CASE("Triply split HTTP request is correctly handled", "[http_modifier]")
+TEST_CASE_METHOD(HttpModifierTestFixture, "Triply split HTTP request is correctly handled", "[http_modifier]")
 {
-    std::span<const char> packet1{reinterpret_cast<const char*>(http_packet_part_1), sizeof(http_packet_part_1)};
-    std::span<const char> packet2{reinterpret_cast<const char*>(http_packet_part_2), sizeof(http_packet_part_2)};
-    std::span<const char> packet3{reinterpret_cast<const char*>(http_packet_part_3), sizeof(http_packet_part_3)};
+    std::span<const char> const packet1{reinterpret_cast<const char*>(http_packet_part_1), sizeof(http_packet_part_1)};
+    std::span<const char> const packet2{reinterpret_cast<const char*>(http_packet_part_2), sizeof(http_packet_part_2)};
+    std::span<const char> const packet3{reinterpret_cast<const char*>(http_packet_part_3), sizeof(http_packet_part_3)};
 
     PacketView pkt1 = parse_packet_view(packet1);
     PacketView pkt2 = parse_packet_view(packet2);
     PacketView pkt3 = parse_packet_view(packet3);
 
-    std::string_view pkt1_payload{pkt1.payload};
-    std::string_view pkt2_payload{pkt2.payload};
-    std::string_view pkt3_payload{pkt3.payload};
+    std::string_view const pkt1_payload{pkt1.payload};
+    std::string_view const pkt2_payload{pkt2.payload};
+    std::string_view const pkt3_payload{pkt3.payload};
     REQUIRE(pkt1_payload.find("httpforever.com") == std::string_view::npos);
     REQUIRE(pkt2_payload.find("httpforever.com") == std::string_view::npos);
     REQUIRE(pkt3_payload.find("httpforever.com") == std::string_view::npos);
     REQUIRE(pkt1_payload.ends_with("Ho"));
     REQUIRE(pkt2_payload.starts_with("st: httpforever"));
     REQUIRE(pkt3_payload.starts_with(".com"));
-
-    ConnTracker tracker{};
-    Classifier classifier{tracker};
-    classifier.add(std::make_unique<HttpClassifier>());
-    HttpHostModifier modifier;
 
     tracker.track(pkt1);
     auto res = classifier.classify(pkt1);
@@ -180,7 +172,6 @@ TEST_CASE("Triply split HTTP request is correctly handled", "[http_modifier]")
     REQUIRE(res == ParseResult::SUCCESS);
     REQUIRE(pkt3.payload_proto == L7Proto::HTTP);
 
-    std::vector<Packet> packets;
     packets.push_back(create_packet(pkt1));
     packets.push_back(create_packet(pkt2));
     packets.push_back(create_packet(pkt3));
@@ -192,60 +183,42 @@ TEST_CASE("Triply split HTTP request is correctly handled", "[http_modifier]")
     // Packet 1: doesn't contain the Host boundary, untouched.
     auto& out_1 = packets[0];
     REQUIRE(out_1.action.action == PacketAction::Action::ACCEPT);
-    std::string_view out_1_payload{out_1.payload()};
+    std::string_view const out_1_payload{out_1.payload()};
     REQUIRE(out_1_payload.find("httpforever.com") == std::string_view::npos);
 
     // Packet 2 (original) is split in two around the Host boundary.
     auto& out_2 = packets[1];
     REQUIRE(((out_2.action.action == PacketAction::Action::DROP_AND_SEND) && (out_2.action.packet_id > 0)));
-    std::string_view out_2_payload{out_2.payload()};
+    std::string_view const out_2_payload{out_2.payload()};
     REQUIRE(out_2_payload.find("httpforever.com") == std::string_view::npos);
 
     auto& out_3 = packets[2];
     REQUIRE(out_3.action.action == PacketAction::Action::SEND);
-    std::string_view out_3_payload{out_3.payload()};
+    std::string_view const out_3_payload{out_3.payload()};
     REQUIRE(out_3_payload.find("httpforever.com") == std::string_view::npos);
 
     // Packet 3 (original) is untouched.
     auto& out_4 = packets[3];
     REQUIRE(out_4.action.action == PacketAction::Action::ACCEPT);
-    std::string_view out_4_payload{out_4.payload()};
+    std::string_view const out_4_payload{out_4.payload()};
     REQUIRE(out_4_payload.find("httpforever.com") == std::string_view::npos);
 }
 
 static unsigned char http_req_no_host_hdr[] = {0x45, 0x0, 0x0, 0x6c, 0xd5, 0xd9, 0x40, 0x0, 0x40, 0x6, 0x35, 0x7a, 0xc0, 0xa8, 0x1, 0xa9, 0x68, 0x15, 0x4, 0xd2, 0xc0, 0x30, 0x0, 0x50, 0x16, 0x25, 0xd0, 0xb, 0xf5, 0x79, 0x48, 0x50, 0x80, 0x18, 0x0, 0x3f, 0x2f, 0x97, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0x88, 0x93, 0xf, 0x47, 0x12, 0xc7, 0x73, 0xee, 0x47, 0x45, 0x54, 0x20, 0x2f, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f, 0x31, 0x2e, 0x31, 0xd, 0xa, 0x55, 0x73, 0x65, 0x72, 0x2d, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x3a, 0x20, 0x63, 0x75, 0x72, 0x6c, 0x2f, 0x38, 0x2e, 0x32, 0x31, 0x2e, 0x30, 0xd, 0xa, 0x41, 0x63, 0x63, 0x65, 0x70, 0x74, 0x3a, 0x20, 0x2a, 0x2f, 0x2a, 0xd, 0xa, 0xd, 0xa};
-TEST_CASE("No Host header in HTTP request", "[http_modifier]")
+TEST_CASE_METHOD(HttpModifierTestFixture, "No Host header in HTTP request", "[http_modifier]")
 {
     std::span<const char> const packet{reinterpret_cast<const char*>(http_req_no_host_hdr), sizeof(http_req_no_host_hdr)};
     PacketView pkt = parse_packet_view(packet);
     std::string_view const pkt_payload{pkt.payload};
-
-    ConnTracker tracker{};
-    Classifier classifier{tracker};
-    classifier.add(std::make_unique<HttpClassifier>());
-    HttpHostModifier modifier;
 
     tracker.track(pkt);
     auto res = classifier.classify(pkt);
 
     REQUIRE(res == ParseResult::SUCCESS);
 
-    std::vector<Packet> packets;
     packets.emplace_back(create_packet(pkt));
 
     REQUIRE(pkt.payload_proto == L7Proto::HTTP);
     REQUIRE(modifier.matches(IPPROTO_TCP, pkt.payload_proto));
     REQUIRE_FALSE(modifier.modify(packets));
-    //
-    // auto& pkt_1 = packets[0];
-    // REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
-    // std::string_view pkt_1_payload{pkt_1.payload()};
-    // REQUIRE(pkt_1_payload.find("httpforever.com") == std::string_view::npos);
-    // REQUIRE(pkt_1.payload_proto == L7Proto::HTTP);
-    //
-    // auto& pkt_2 = packets[1];
-    // REQUIRE(pkt_2.action.action == PacketAction::Action::SEND);
-    // std::string_view pkt_2_payload{pkt_2.payload()};
-    // REQUIRE(pkt_2_payload.find("httpforever.com") == std::string_view::npos);
-    // REQUIRE(pkt_2.payload_proto == L7Proto::HTTP);
 }
