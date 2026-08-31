@@ -5,7 +5,7 @@
 #include "http_host_modifier.hpp"
 
 #include "../checksum.hpp"
-
+#include <ranges>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -29,14 +29,18 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
 
     // TODO: case-insensitive
     constexpr std::string_view HOST_HEADER_NAME = "Host:";
-    const auto host_pos = payload_str.find(HOST_HEADER_NAME);
-    if (host_pos == std::string_view::npos) {
-        std::println(std::cerr, "Host header is not found, wtf?");
+
+    const auto host_subrange = std::ranges::search(payload_str, HOST_HEADER_NAME, [](const auto ch1, const auto ch2) {
+       return std::tolower(ch1) == std::tolower(ch2);
+    });
+    if (host_subrange.empty()) {
+        std::println(std::cerr, "[http_modifier]: Host header is not found");
         return false;
     }
+    const auto host_pos = std::distance(payload_str.begin(), host_subrange.begin());
 
     constexpr auto SPLIT_AT = HOST_HEADER_NAME.size() + 3;
-    const auto split_at_global_pos = host_pos + SPLIT_AT;
+    const auto split_at_global_pos = static_cast<std::size_t>(host_pos) + SPLIT_AT;
     assert(split_at_global_pos < full_payload.size());
 
     auto iter = vec.begin();
