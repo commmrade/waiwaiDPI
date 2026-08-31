@@ -5,19 +5,28 @@
 #ifndef WAIWAIDPI_MODIFIER_HPP
 #define WAIWAIDPI_MODIFIER_HPP
 
+#include "../conn_tracker.hpp"
 #include "../packet_view.hpp"
 #include <cstring>
 #include <vector>
 
-
-
-class Modifier
+class IModifier
 {
 public:
-    virtual ~Modifier() = default;
+    virtual ~IModifier() = default;
     virtual bool modify(std::vector<Packet>& vec) = 0; // true - successfully processed, false - did nothing
     [[nodiscard]] virtual bool matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const = 0; // used to make sure that these packets can be processed by this modifier
 };
 
+class Modifier
+{
+    std::vector<std::unique_ptr<IModifier>> modifiers_;
+public:
+    bool modify(std::vector<Packet>& vec, const Connection& conn);
+    void add(std::unique_ptr<IModifier> modifier)
+    {
+        modifiers_.push_back(std::move(modifier));
+    }
+};
 
 #endif// WAIWAIDPI_MODIFIER_HPP

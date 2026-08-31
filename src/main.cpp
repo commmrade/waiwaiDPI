@@ -26,6 +26,8 @@ struct Context
     mnl_socket *sock{ nullptr };
     Classifier *classifier{ nullptr };
 
+    Modifier *modifier {nullptr};
+
     ConnTracker *tracker{ nullptr };
 
     int raw_sock;
@@ -73,8 +75,8 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         packet.get_dest_port(),
         packet.network_hdr->protocol);
 
-    std::vector<std::unique_ptr<Modifier>> modifiers;
-    modifiers.push_back(std::make_unique<HttpHostModifier>());
+    // std::vector<std::unique_ptr<Modifier>> modifiers;
+    // modifiers.push_back(std::make_unique<HttpHostModifier>());
     // modifiers.push_back(std::make_unique<DumbassModifier>());
 
     if (!conn.is_done()) {
@@ -98,13 +100,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(create_packet(cfed_pkt));
             }
 
-            for (auto &modifier : modifiers) {
-                if (!modifier->matches(conn.get_l4_proto(), conn.payload_proto())) {
-                    continue;
-                }
-                if (!modifier->modify(packets)) {
-                }
-            }
+            ctx->modifier->modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
                 switch (send_pkt.action.action) {
@@ -228,9 +224,13 @@ int main(int argc, char *argv[])
     cfier.add(std::make_unique<HttpClassifier>());
     cfier.add(std::make_unique<TlsHandshakeClassifier>());
 
+    Modifier modifier;
+    modifier.add(std::make_unique<HttpHostModifier>());
+
     Context ctx{};
     ctx.sock = socket;
     ctx.classifier = &cfier;
+    ctx.modifier = &modifier;
     ctx.tracker = &tracker;
     ctx.raw_sock = raw_sock;
 

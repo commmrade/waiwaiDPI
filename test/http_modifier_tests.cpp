@@ -18,12 +18,13 @@ class HttpModifierTestFixture
 protected:
     ConnTracker tracker;
     Classifier classifier{tracker};
-    HttpHostModifier modifier;
+    Modifier modifier;
 
     std::vector<Packet> packets;
 public:
     HttpModifierTestFixture()
     {
+        modifier.add(std::make_unique<HttpHostModifier>());
         classifier.add(std::make_unique<HttpClassifier>());
     }
 };
@@ -36,6 +37,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Whole HTTP request is split at Host h
     REQUIRE(pkt_payload.find("httpforever.com") != std::string_view::npos);
 
     tracker.track(pkt);
+    auto& conn = tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port(), pkt.network_hdr->protocol);
     auto res = classifier.classify(pkt);
 
     REQUIRE(res == ParseResult::SUCCESS);
@@ -43,8 +45,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Whole HTTP request is split at Host h
     packets.emplace_back(create_packet(pkt));
 
     REQUIRE(pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE(modifier.matches(IPPROTO_TCP, pkt.payload_proto));
-    REQUIRE(modifier.modify(packets));
+    REQUIRE(modifier.modify(packets, conn));
 
     auto& pkt_1 = packets[0];
     REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
@@ -67,6 +68,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Case Insensitive searchf or Host Head
     REQUIRE(pkt_payload.find("httpforever.com") != std::string_view::npos);
 
     tracker.track(pkt);
+    auto& conn = tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port(), pkt.network_hdr->protocol);
     auto res = classifier.classify(pkt);
 
     REQUIRE(res == ParseResult::SUCCESS);
@@ -74,8 +76,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Case Insensitive searchf or Host Head
     packets.emplace_back(create_packet(pkt));
 
     REQUIRE(pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE(modifier.matches(IPPROTO_TCP, pkt.payload_proto));
-    REQUIRE(modifier.modify(packets));
+    REQUIRE(modifier.modify(packets, conn));
 
     auto& pkt_1 = packets[0];
     REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
@@ -105,6 +106,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Split HTTP request is correctly separ
     REQUIRE(packet2_payload.find("httpforever.com") == std::string_view::npos);
 
     tracker.track(pkt1);
+    auto& conn = tracker.get_conn(pkt1.network_hdr->saddr, pkt1.get_source_port(), pkt1.network_hdr->daddr, pkt1.get_dest_port(), pkt1.network_hdr->protocol);
     auto res = classifier.classify(pkt1);
     REQUIRE(res == ParseResult::REASSEMBLING);
 
@@ -115,8 +117,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Split HTTP request is correctly separ
     packets.push_back(create_packet(pkt1));
     packets.push_back(create_packet(pkt2));
 
-    REQUIRE(modifier.matches(IPPROTO_TCP, pkt2.payload_proto));
-    REQUIRE(modifier.modify(packets));
+    REQUIRE(modifier.modify(packets, conn));
     REQUIRE(packets.size() == 3);
 
     auto& pkt_1 = packets[0];
@@ -160,6 +161,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Triply split HTTP request is correctl
     REQUIRE(pkt3_payload.starts_with(".com"));
 
     tracker.track(pkt1);
+    auto& conn = tracker.get_conn(pkt1.network_hdr->saddr, pkt1.get_source_port(), pkt1.network_hdr->daddr, pkt1.get_dest_port(), pkt1.network_hdr->protocol);
     auto res = classifier.classify(pkt1);
     REQUIRE(res == ParseResult::REASSEMBLING);
 
@@ -176,8 +178,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Triply split HTTP request is correctl
     packets.push_back(create_packet(pkt2));
     packets.push_back(create_packet(pkt3));
 
-    REQUIRE(modifier.matches(IPPROTO_TCP, pkt3.payload_proto));
-    REQUIRE(modifier.modify(packets));
+    REQUIRE(modifier.modify(packets, conn));
     REQUIRE(packets.size() == 4);
 
     // Packet 1: doesn't contain the Host boundary, untouched.
@@ -212,6 +213,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "No Host header in HTTP request", "[ht
     std::string_view const pkt_payload{pkt.payload};
 
     tracker.track(pkt);
+    auto& conn = tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port(), pkt.network_hdr->protocol);
     auto res = classifier.classify(pkt);
 
     REQUIRE(res == ParseResult::SUCCESS);
@@ -219,6 +221,5 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "No Host header in HTTP request", "[ht
     packets.emplace_back(create_packet(pkt));
 
     REQUIRE(pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE(modifier.matches(IPPROTO_TCP, pkt.payload_proto));
-    REQUIRE_FALSE(modifier.modify(packets));
+    REQUIRE_FALSE(modifier.modify(packets, conn));
 }
