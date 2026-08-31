@@ -212,3 +212,40 @@ TEST_CASE("Triply split HTTP request is correctly handled", "[http_modifier]")
     std::string_view out_4_payload{out_4.payload()};
     REQUIRE(out_4_payload.find("httpforever.com") == std::string_view::npos);
 }
+
+static unsigned char http_req_no_host_hdr[] = {0x45, 0x0, 0x0, 0x6c, 0xd5, 0xd9, 0x40, 0x0, 0x40, 0x6, 0x35, 0x7a, 0xc0, 0xa8, 0x1, 0xa9, 0x68, 0x15, 0x4, 0xd2, 0xc0, 0x30, 0x0, 0x50, 0x16, 0x25, 0xd0, 0xb, 0xf5, 0x79, 0x48, 0x50, 0x80, 0x18, 0x0, 0x3f, 0x2f, 0x97, 0x0, 0x0, 0x1, 0x1, 0x8, 0xa, 0x88, 0x93, 0xf, 0x47, 0x12, 0xc7, 0x73, 0xee, 0x47, 0x45, 0x54, 0x20, 0x2f, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f, 0x31, 0x2e, 0x31, 0xd, 0xa, 0x55, 0x73, 0x65, 0x72, 0x2d, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x3a, 0x20, 0x63, 0x75, 0x72, 0x6c, 0x2f, 0x38, 0x2e, 0x32, 0x31, 0x2e, 0x30, 0xd, 0xa, 0x41, 0x63, 0x63, 0x65, 0x70, 0x74, 0x3a, 0x20, 0x2a, 0x2f, 0x2a, 0xd, 0xa, 0xd, 0xa};
+TEST_CASE("No Host header in HTTP request", "[http_modifier]")
+{
+    std::span<const char> const packet{reinterpret_cast<const char*>(http_req_no_host_hdr), sizeof(http_req_no_host_hdr)};
+    PacketView pkt = parse_packet_view(packet);
+    std::string_view const pkt_payload{pkt.payload};
+
+    ConnTracker tracker{};
+    Classifier classifier{tracker};
+    classifier.add(std::make_unique<HttpClassifier>());
+    HttpHostModifier modifier;
+
+    tracker.track(pkt);
+    auto res = classifier.classify(pkt);
+
+    REQUIRE(res == ParseResult::SUCCESS);
+
+    std::vector<Packet> packets;
+    packets.emplace_back(create_packet(pkt));
+
+    REQUIRE(pkt.payload_proto == L7Proto::HTTP);
+    REQUIRE(modifier.matches(IPPROTO_TCP, pkt.payload_proto));
+    REQUIRE_FALSE(modifier.modify(packets));
+    //
+    // auto& pkt_1 = packets[0];
+    // REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
+    // std::string_view pkt_1_payload{pkt_1.payload()};
+    // REQUIRE(pkt_1_payload.find("httpforever.com") == std::string_view::npos);
+    // REQUIRE(pkt_1.payload_proto == L7Proto::HTTP);
+    //
+    // auto& pkt_2 = packets[1];
+    // REQUIRE(pkt_2.action.action == PacketAction::Action::SEND);
+    // std::string_view pkt_2_payload{pkt_2.payload()};
+    // REQUIRE(pkt_2_payload.find("httpforever.com") == std::string_view::npos);
+    // REQUIRE(pkt_2.payload_proto == L7Proto::HTTP);
+}
