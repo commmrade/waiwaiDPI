@@ -100,6 +100,10 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(create_packet(cfed_pkt));
             }
 
+            if (conn.payload_proto() == L7Proto::HTTP && !packets.empty() && !packets[0].payload().empty()) {
+                std::println("It was {} packets", packets.size());
+            }
+
             ctx->modifier->modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
