@@ -25,7 +25,9 @@ add_executable(main main.cpp
         modifiers/dumbass_modifier.hpp
         checksum.cpp
         checksum.hpp
-        modifiers/modifier.cpp)
+        modifiers/modifier.cpp
+        hash.hpp
+)
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
 target_link_libraries(

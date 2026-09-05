@@ -75,10 +75,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         packet.get_dest_port(),
         packet.network_hdr->protocol);
 
-    // std::vector<std::unique_ptr<Modifier>> modifiers;
-    // modifiers.push_back(std::make_unique<HttpHostModifier>());
-    // modifiers.push_back(std::make_unique<DumbassModifier>());
-
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
@@ -100,8 +96,21 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(create_packet(cfed_pkt));
             }
 
-            if (conn.payload_proto() == L7Proto::HTTP && !packets.empty() && !packets[0].payload().empty()) {
-                std::println("It was {} packets", packets.size());
+            if (conn.payload_proto() == L7Proto::HTTP) {
+                std::print("is equal: {} == {}, Packets count: {}. Payload sizes: ", (int)conn.payload_proto(), (int)packet.payload_proto, packets.size());
+                for (const auto& pkt : packets) {
+                    const auto* ip = pkt.network_hdr();          // iphdr*
+                    const auto* tcp = static_cast<const tcphdr*>(pkt.transport_hdr()); // adjust if named differently
+
+                    in_addr src_addr{ip->saddr};
+                    in_addr dst_addr{ip->daddr};
+
+                    std::print("{} {}:{}->{}:{}, ",
+                        pkt.payload().size(),
+                        inet_ntoa(src_addr), ntohs(tcp->source),
+                        inet_ntoa(dst_addr), ntohs(tcp->dest));
+                }
+                std::println();
             }
 
             ctx->modifier->modify(packets, conn);
