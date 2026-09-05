@@ -4,12 +4,14 @@
 
 #ifndef WAIWAIDPI_CONN_TRACKER_HPP
 #define WAIWAIDPI_CONN_TRACKER_HPP
+#include "hash.hpp"
 #include "packet_view.hpp"
 #include "protocol.hpp"
 #include <chrono>
 #include <cstdint>
 #include <map>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 class Connection
@@ -64,6 +66,7 @@ public:
     void reset_reasm();
 
     void add_reasm_frag(const PacketView& pkt) { reasm_.frags.emplace_back(create_packet(pkt)); }
+    void add_reasm_frag(const Packet& pkt) { reasm_.frags.emplace_back(pkt); }
     [[nodiscard]] const std::vector<Packet> &get_reasm_frags() const { return reasm_.frags; }
     [[nodiscard]] std::size_t get_reasm_pos() const { return reasm_.pos; }
     void set_reasm_pos(const std::size_t pos) { reasm_.pos = pos; }
@@ -93,10 +96,27 @@ public:
     void track_transport(const PacketView &packet);
 };
 
+namespace std {
+template<>
+struct hash<std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t, int>>
+{
+    std::size_t operator()(const std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t, int>& val) const noexcept
+    {
+        std::size_t seed = 0;
+        hash_combine(seed, std::get<0>(val));
+        hash_combine(seed, std::get<1>(val));
+        hash_combine(seed, std::get<2>(val));
+        hash_combine(seed, std::get<3>(val));
+        hash_combine(seed, std::get<4>(val));
+        return seed;
+    }
+};
+}
+
 class ConnTracker
 {
 private:
-    std::map<std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t, int>, Connection> conns_;
+    std::unordered_map<std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t, int>, Connection> conns_;
 
     static int timeout_for_tcp_state(const Connection::Tcp::TcpState state);
 

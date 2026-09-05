@@ -32,12 +32,12 @@ std::uint16_t calc_tcp_checksum(const Packet &pkt)
     auto add_bytes = [&sum](const char *data, std::size_t len) {
         std::size_t i = 0;
         for (; i + 1 < len; i += 2) {
-            std::uint16_t word;
+            std::uint16_t word = 0;
             std::memcpy(&word, data + i, 2);
             sum += ntohs(word);
         }
         if (i < len) {
-            std::uint16_t word = static_cast<std::uint8_t>(data[i]) << 8;
+            std::uint16_t const word = static_cast<std::uint8_t>(data[i]) << 8;
             sum += word;
         }
     };

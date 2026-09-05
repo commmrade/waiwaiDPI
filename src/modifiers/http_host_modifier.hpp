@@ -8,7 +8,7 @@
 #include "modifier.hpp"
 
 
-class HttpHostModifier final : public Modifier
+class HttpHostModifier final : public IModifier
 {
 public:
     bool modify(std::vector<Packet> &vec) override;

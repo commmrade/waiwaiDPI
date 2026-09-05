@@ -26,6 +26,8 @@ struct Context
     mnl_socket *sock{ nullptr };
     Classifier *classifier{ nullptr };
 
+    Modifier *modifier {nullptr};
+
     ConnTracker *tracker{ nullptr };
 
     int raw_sock;
@@ -73,15 +75,12 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         packet.get_dest_port(),
         packet.network_hdr->protocol);
 
-    std::vector<std::unique_ptr<Modifier>> modifiers;
-    modifiers.push_back(std::make_unique<HttpHostModifier>());
-    // modifiers.push_back(std::make_unique<DumbassModifier>());
-
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
             if (packet.payload_proto == L7Proto::TLS_HANDSHAKE) {
-                conn.set_done(true); // Avoid buffering packets after we got the CLient Hello!!!
+                std::println("got a handshake");
+                conn.set_done(true);
             }
 
             auto &cfed_pkt = packet;
@@ -99,14 +98,26 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(create_packet(cfed_pkt));
             }
 
-            for (auto &modifier : modifiers) {
-                if (!modifier->matches(conn.get_l4_proto(), conn.payload_proto())) {
-                    continue;
-                }
+            if (conn.payload_proto() == L7Proto::HTTP) {
+                std::print("conn: {}, is equal: {} == {}, Packets count: {}. Payload sizes: ", (void*)&conn, (int)conn.payload_proto(), (int)packet.payload_proto, packets.size());
+                for (const auto& pkt : packets) {
+                    const auto* ip = packet.network_hdr;          // iphdr*
+                    const auto* tcp = std::get<const tcphdr*>(packet.transport_hdr); // adjust if named differently
 
-                if (!modifier->modify(packets)) {
+                    std::array<char, INET_ADDRSTRLEN> src_buf{};
+                    std::array<char, INET_ADDRSTRLEN> dst_buf{};
+                    inet_ntop(AF_INET, &ip->saddr, src_buf.data(), src_buf.size());
+                    inet_ntop(AF_INET, &ip->daddr, dst_buf.data(), dst_buf.size());
+
+                    std::print("{} {}:{}->{}:{}, ",
+                        pkt.payload().size(),
+                        src_buf.data(), ntohs(tcp->source),
+                        dst_buf.data(), ntohs(tcp->dest));
                 }
+                std::println();
             }
+
+            ctx->modifier->modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
                 switch (send_pkt.action.action) {
@@ -150,6 +161,9 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
                 }
             }
+        } else if (res == ParseResult::ERROR) {
+            ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
+            assert(ret);
         }
     } else {
         ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
@@ -230,9 +244,13 @@ int main(int argc, char *argv[])
     cfier.add(std::make_unique<HttpClassifier>());
     cfier.add(std::make_unique<TlsHandshakeClassifier>());
 
+    Modifier modifier;
+    modifier.add(std::make_unique<HttpHostModifier>());
+
     Context ctx{};
     ctx.sock = socket;
     ctx.classifier = &cfier;
+    ctx.modifier = &modifier;
     ctx.tracker = &tracker;
     ctx.raw_sock = raw_sock;
 

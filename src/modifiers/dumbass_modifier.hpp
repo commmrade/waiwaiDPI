@@ -7,7 +7,7 @@
 #include "modifier.hpp"
 
 
-class DumbassModifier final : public Modifier
+class DumbassModifier final : public IModifier
 {
 public:
     bool modify(std::vector<Packet> &vec) override;
