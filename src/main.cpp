@@ -79,8 +79,10 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
             if (packet.payload_proto == L7Proto::TLS_HANDSHAKE) {
+                std::println("got a handshake");
                 conn.set_done(true);
             }
+
             auto &cfed_pkt = packet;
             std::vector<Packet> packets;
 
@@ -97,18 +99,20 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
             }
 
             if (conn.payload_proto() == L7Proto::HTTP) {
-                std::print("is equal: {} == {}, Packets count: {}. Payload sizes: ", (int)conn.payload_proto(), (int)packet.payload_proto, packets.size());
+                std::print("conn: {}, is equal: {} == {}, Packets count: {}. Payload sizes: ", (void*)&conn, (int)conn.payload_proto(), (int)packet.payload_proto, packets.size());
                 for (const auto& pkt : packets) {
-                    const auto* ip = pkt.network_hdr();          // iphdr*
-                    const auto* tcp = static_cast<const tcphdr*>(pkt.transport_hdr()); // adjust if named differently
+                    const auto* ip = packet.network_hdr;          // iphdr*
+                    const auto* tcp = std::get<const tcphdr*>(packet.transport_hdr); // adjust if named differently
 
-                    in_addr src_addr{ip->saddr};
-                    in_addr dst_addr{ip->daddr};
+                    std::array<char, INET_ADDRSTRLEN> src_buf{};
+                    std::array<char, INET_ADDRSTRLEN> dst_buf{};
+                    inet_ntop(AF_INET, &ip->saddr, src_buf.data(), src_buf.size());
+                    inet_ntop(AF_INET, &ip->daddr, dst_buf.data(), dst_buf.size());
 
                     std::print("{} {}:{}->{}:{}, ",
                         pkt.payload().size(),
-                        inet_ntoa(src_addr), ntohs(tcp->source),
-                        inet_ntoa(dst_addr), ntohs(tcp->dest));
+                        src_buf.data(), ntohs(tcp->source),
+                        dst_buf.data(), ntohs(tcp->dest));
                 }
                 std::println();
             }
@@ -157,6 +161,9 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
                 }
             }
+        } else if (res == ParseResult::ERROR) {
+            ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
+            assert(ret);
         }
     } else {
         ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
