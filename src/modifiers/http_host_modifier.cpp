@@ -19,9 +19,7 @@ static bool host_list(const std::string_view hostname)
 
 bool HttpHostModifier::modify(std::vector<Packet> &vec)
 {
-    // We could use
     std::vector<char> full_payload;
-    // OPTIMIZATION: can i use something like concat_view and then do .find() on it?
     for (const auto& pkt : vec) {
         const auto payload = pkt.payload();
         full_payload.insert(full_payload.end(), payload.begin(), payload.end());

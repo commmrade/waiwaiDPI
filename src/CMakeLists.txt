@@ -29,6 +29,8 @@ add_executable(main main.cpp
         hash.hpp
         classifiers/empty_classifier.cpp
         classifiers/empty_classifier.hpp
+        modifiers/tls_modifier.cpp
+        modifiers/tls_modifier.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})

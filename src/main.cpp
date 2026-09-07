@@ -5,6 +5,7 @@
 #include "consts.hpp"
 #include "modifiers/dumbass_modifier.hpp"
 #include "modifiers/http_host_modifier.hpp"
+#include "modifiers/tls_modifier.hpp"
 #include "nfq.hpp"
 
 #include <arpa/inet.h>
@@ -79,7 +80,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
             if (packet.payload_proto == L7Proto::TLS_HANDSHAKE) {
-                std::println("got a handshake");
                 conn.set_done(true);
             }
 
@@ -96,25 +96,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
             } else {
                 packets.emplace_back(create_packet(cfed_pkt));
-            }
-
-            if (conn.payload_proto() == L7Proto::HTTP) {
-                std::print("conn: {}, is equal: {} == {}, Packets count: {}. Payload sizes: ", (void*)&conn, (int)conn.payload_proto(), (int)packet.payload_proto, packets.size());
-                for (const auto& pkt : packets) {
-                    const auto* ip = packet.network_hdr;          // iphdr*
-                    const auto* tcp = std::get<const tcphdr*>(packet.transport_hdr); // adjust if named differently
-
-                    std::array<char, INET_ADDRSTRLEN> src_buf{};
-                    std::array<char, INET_ADDRSTRLEN> dst_buf{};
-                    inet_ntop(AF_INET, &ip->saddr, src_buf.data(), src_buf.size());
-                    inet_ntop(AF_INET, &ip->daddr, dst_buf.data(), dst_buf.size());
-
-                    std::print("{} {}:{}->{}:{}, ",
-                        pkt.payload().size(),
-                        src_buf.data(), ntohs(tcp->source),
-                        dst_buf.data(), ntohs(tcp->dest));
-                }
-                std::println();
             }
 
             ctx->modifier->modify(packets, conn);
@@ -246,6 +227,7 @@ int main(int argc, char *argv[])
 
     Modifier modifier;
     modifier.add(std::make_unique<HttpHostModifier>());
+    modifier.add(std::make_unique<TlsHandshakeModifier>());
 
     Context ctx{};
     ctx.sock = socket;
