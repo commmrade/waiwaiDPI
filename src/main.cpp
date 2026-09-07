@@ -79,7 +79,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     if (!conn.is_done()) {
         auto res = ctx->classifier->classify(packet);
         if (res == ParseResult::SUCCESS) {
-            if (packet.payload_proto == L7Proto::TLS_HANDSHAKE) {
+            if (packet.payload_proto == L7Proto::TLS_HANDSHAKE || conn.payload_proto() == L7Proto::TLS_HANDSHAKE) {
                 conn.set_done(true);
             }
 

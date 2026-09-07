@@ -5,7 +5,7 @@
 #include "tls_classifier.hpp"
 #include "../packet_view.hpp"
 #include "../conn_tracker.hpp"
-
+#include <print>
 #include <cstring>
 
 ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketView &pkt, std::optional<std::size_t> tls_len)
@@ -46,8 +46,13 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker&
     }
 
     constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
-    if (pkt.payload[0] != TLS_HANDSHAKE_TYPE && pkt.payload[1] != 0x03 && pkt.payload[2] != 0x03) {
-        return ParseResult::ERROR;// it is not TLS handshake
+    constexpr auto TLS_VERSION_MAJOR = 0x03;
+
+    if (pkt.payload[0] != TLS_HANDSHAKE_TYPE ||
+        pkt.payload[1] != TLS_VERSION_MAJOR ||
+        (pkt.payload[2] != 0x01 && pkt.payload[2] != 0x03))
+    {
+        return ParseResult::ERROR; // not a TLS handshake
     }
 
     std::uint16_t tls_len{};

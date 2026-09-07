@@ -8,82 +8,127 @@
 #include <print>
 #include "../checksum.hpp"
 
+// <new span, success>
+static bool safe_subspan(std::span<const char>& span, const std::size_t offset)
+{
+    if (span.size() < offset) {
+        return false;
+    }
+    span = span.subspan(offset);
+    return true;
+}
+
 std::optional<std::string_view> TlsHandshakeModifier::get_sni(std::span<const char> payload)
 {
-    assert(payload.size() >= 5);
-
-    // header checks
+    // It is guaranteed to be a TLS handshake (because of the classifier), nothing else is guaranteed besides that
     constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
-    if (payload[0] != TLS_HANDSHAKE_TYPE) {
-        // std::println(std::cerr, "TLS handshake type is wrong");
-        return std::nullopt;
-    }
-
-    if (payload[1] != 0x03 && payload[2] != 0x03) { // legacy field, almost always 0303
-        return std::nullopt;
-    }
+    assert(payload.size() >= 5);
+    assert(payload[0] == TLS_HANDSHAKE_TYPE);
+    assert(payload[1] == 0x03 && (payload[2] == 0x03 || payload[2] == 0x01));
 
     // content stuff
     payload = payload.subspan(5); // skip header bytes, get to content
 
+    // From now on I need to do all the checks, because Classifier checks just the header (first 5 bytes)
     if (payload[0] != 0x01) { // content type is not ClientHello
         // std::println(std::cerr, "Content type is not ClientHello");
         return std::nullopt;
     }
 
-    payload = payload.subspan(38); // skip type(1) + length(3) + legacyVersion(2) + random(32) fields
+    if (!safe_subspan(payload, 38)) { // skip type(1) + length(3) + legacyVersion(2) + random(32) fields
+        std::println(std::cerr, "Ill-formed TLS");
+        return std::nullopt;
+    }
 
     const auto legacy_session_id_len = static_cast<std::uint8_t>(payload[0]);
-    payload = payload.subspan(sizeof(legacy_session_id_len) + legacy_session_id_len);
+    if (!safe_subspan(payload, sizeof(legacy_session_id_len) + legacy_session_id_len)) {
+        std::println(std::cerr, "Ill-formed TLS");
+        return std::nullopt;
+    }
 
     std::uint16_t cipher_suites_len = 0;
+    if (payload.size() < sizeof(cipher_suites_len)) {
+        std::println(std::cerr, "Ill-formed TLS");
+        return std::nullopt;
+    }
     std::memcpy(&cipher_suites_len, payload.data(), sizeof(cipher_suites_len));
     cipher_suites_len = ntohs(cipher_suites_len);
 
-    payload = payload.subspan(sizeof(cipher_suites_len) + cipher_suites_len + 2); // + 2 for "LegacyCompressionMethods" field
+    if (!safe_subspan(payload, sizeof(cipher_suites_len) + cipher_suites_len + 2)) {
+        std::println(std::cerr, "Ill-formed TLS");
+        return std::nullopt;
+    }
 
     // parse extensions (sni is here) (loop)
     std::uint16_t exts_len = 0;
+    if (payload.size() < sizeof(exts_len)) {
+        std::println(std::cerr, "Ill-formed TLS");
+        return std::nullopt;
+    }
     std::memcpy(&exts_len, payload.data(), sizeof(exts_len));
     exts_len = ntohs(exts_len);
-
     payload = payload.subspan(sizeof(exts_len));
 
     while (!payload.empty()) {
         std::uint16_t ext_type = 0;
+        if (payload.size() < sizeof(ext_type)) {
+            std::println(std::cerr, "Ill-formed TLS");
+            return std::nullopt;
+        }
         std::memcpy(&ext_type, payload.data(), sizeof(ext_type));
         ext_type = ntohs(ext_type);
 
         payload = payload.subspan(sizeof(ext_type));
 
         std::uint16_t ext_len = 0;
+        if (payload.size() < sizeof(ext_len)) {
+            std::println(std::cerr, "Ill-formed TLS");
+            return std::nullopt;
+        }
         std::memcpy(&ext_len, payload.data(), sizeof(ext_len));
         ext_len = ntohs(ext_len);
 
         constexpr auto EXT_SNI_TYPE = 0x00;
         if (ext_type != EXT_SNI_TYPE) {
-            payload = payload.subspan(sizeof(ext_len) + ext_len);
+
+            if (!safe_subspan(payload, sizeof(ext_len) + ext_len)) {
+                std::println(std::cerr, "Ill-formed TLS");
+                return std::nullopt;
+            }
             continue;
         }
 
         payload = payload.subspan(sizeof(ext_len));
 
         std::uint16_t serv_name_list_len = 0;
+        if (payload.size() < sizeof(serv_name_list_len) + 1) {
+            std::println(std::cerr, "Ill-formed TLS");
+            return std::nullopt;
+        }
         std::memcpy(&serv_name_list_len, payload.data(), sizeof(serv_name_list_len));
         serv_name_list_len = ntohs(serv_name_list_len);
 
-        assert(payload[2] == 0x00); // name type is a host name
+        if (payload[2] != 0x00) { // well acyually servname list is a list, but it is ALWAYS 1 element so idc
+            return std::nullopt;
+        }
 
-        payload = payload.subspan(sizeof(serv_name_list_len) + 1); // +1 for name type
+        payload = payload.subspan(sizeof(serv_name_list_len) + 1);
 
         std::uint16_t hostname_len = 0;
+        if (payload.size() < sizeof(hostname_len)) {
+            std::println(std::cerr, "Ill-formed TLS");
+            return std::nullopt;
+        }
         std::memcpy(&hostname_len, payload.data(), sizeof(hostname_len));
         hostname_len = ntohs(hostname_len);
 
+        if (payload.size() < sizeof(hostname_len) + hostname_len) {
+            std::println(std::cerr, "Ill-formed TLS");
+            return std::nullopt;
+        }
+
         return std::string_view{std::next(payload.data(), sizeof(hostname_len)), static_cast<std::size_t>(hostname_len)};
     }
-
-    // std::println(std::cerr, "Haven't found a SNI extension");
 
     return std::nullopt;
 }
