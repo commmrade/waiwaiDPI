@@ -69,7 +69,7 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
     second_packet.action.packet_id = 0;
 
     tcphdr* tcp = static_cast<tcphdr*>(second_packet.transport_hdr());
-    tcp->seq += htonl(part1.size());
+    tcp->seq = htonl(ntohl(tcp->seq) + static_cast<std::uint32_t>(part1.size()));
     tcp->check = 0;
     tcp->check = calc_tcp_checksum(second_packet);
 

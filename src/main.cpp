@@ -36,7 +36,7 @@ struct Context
 
 int cb_loop(const struct nlmsghdr *nlh, void *data)
 {
-    Context *ctx = static_cast<Context *>(data);
+    auto *ctx = static_cast<Context *>(data);
 
     const nfgenmsg *genmsg = static_cast<nfgenmsg *>(mnl_nlmsg_get_payload(nlh));
     assert(genmsg);
@@ -260,7 +260,6 @@ int main(int argc, char *argv[])
     }
 
     mnl_socket_close(socket);
-
     return EXIT_SUCCESS;
 }
 

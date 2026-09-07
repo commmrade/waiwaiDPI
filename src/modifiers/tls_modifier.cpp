@@ -15,7 +15,7 @@ std::optional<std::string_view> TlsHandshakeModifier::get_sni(std::span<const ch
     // header checks
     constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
     if (payload[0] != TLS_HANDSHAKE_TYPE) {
-        std::println(std::cerr, "TLS handshake type is wrong");
+        // std::println(std::cerr, "TLS handshake type is wrong");
         return std::nullopt;
     }
 
@@ -27,7 +27,7 @@ std::optional<std::string_view> TlsHandshakeModifier::get_sni(std::span<const ch
     payload = payload.subspan(5); // skip header bytes, get to content
 
     if (payload[0] != 0x01) { // content type is not ClientHello
-        std::println(std::cerr, "Content type is not ClientHello");
+        // std::println(std::cerr, "Content type is not ClientHello");
         return std::nullopt;
     }
 
@@ -83,10 +83,11 @@ std::optional<std::string_view> TlsHandshakeModifier::get_sni(std::span<const ch
         return std::string_view{std::next(payload.data(), sizeof(hostname_len)), static_cast<std::size_t>(hostname_len)};
     }
 
-    std::println(std::cerr, "Haven't found a SNI extension");
+    // std::println(std::cerr, "Haven't found a SNI extension");
 
     return std::nullopt;
 }
+
 bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
 {
     std::vector<char> full_payload;
@@ -95,19 +96,22 @@ bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
         full_payload.insert(full_payload.end(), payload.begin(), payload.end());
     }
 
-    constexpr auto SPLIT_POS = 3;
     // Parse and find the SNI extension
     const auto sni_opt = get_sni(full_payload);
     if (!sni_opt.has_value()) {
+        std::println(std::cerr, "SNI Extension was not found in this handshake");
         return false;
     }
 
     const auto& sni_str = sni_opt.value();
     const auto sni_str_pos = std::distance(static_cast<const char*>(full_payload.data()), sni_str.data());
 
+    constexpr auto SPLIT_POS = 3;
     const auto split_at_global_pos = static_cast<std::size_t>(sni_str_pos) + SPLIT_POS;
-    assert(split_at_global_pos < full_payload.size());
-
+    if (split_at_global_pos >= full_payload.size()) {
+        std::print(std::cerr, "Split pos is really wrong, reduce it.");
+        return false;
+    }
 
     auto iter = vec.begin();
     std::size_t offset = 0;
@@ -134,7 +138,7 @@ bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
     Packet first_packet = create_packet_from(pkt_view, part1);
     first_packet.action.action = PacketAction::Action::DROP_AND_SEND;
 
-    tcphdr* tcp = static_cast<tcphdr*>(first_packet.transport_hdr());
+    auto* tcp = static_cast<tcphdr*>(first_packet.transport_hdr());
     tcp->check = 0;
     tcp->check = calc_tcp_checksum(first_packet);
 
@@ -143,8 +147,7 @@ bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
     second_packet.action.packet_id = 0;
 
     tcp = static_cast<tcphdr*>(second_packet.transport_hdr());
-    tcp->seq += htonl(static_cast<std::uint32_t>(part1.size()));
-    // tcp->seq = htonl(ntohl(tcp->seq) + static_cast<std::uint32_t>(part1.size()));
+    tcp->seq = htonl(ntohl(tcp->seq) + static_cast<std::uint32_t>(part1.size()));
     tcp->check = 0;
     tcp->check = calc_tcp_checksum(second_packet);
 
