@@ -177,27 +177,27 @@ bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
     auto& pkt = *iter;
     const auto pkt_view = parse_packet_view(pkt);
     const auto pkt_payload = pkt.payload();
-    const std::span<const char> part1{pkt_payload.begin(), std::next(pkt_payload.begin(), static_cast<std::ptrdiff_t>(split_pos_relative_to_packet))};
     const std::span<const char> part2{std::next(pkt_payload.begin(), static_cast<std::ptrdiff_t>(split_pos_relative_to_packet)), pkt_payload.end()};
 
-    Packet first_packet = create_packet_from(pkt_view, part1);
-    first_packet.action.action = PacketAction::Action::DROP_AND_SEND;
+    pkt.packet.resize(pkt.packet.size() - part2.size());
+    pkt.action.action = PacketAction::Action::DROP_AND_SEND;
 
-    auto* tcp = static_cast<tcphdr*>(first_packet.transport_hdr());
+    auto* tcp = static_cast<tcphdr*>(pkt.transport_hdr());
+    auto* ip = pkt.network_hdr();
+
+    ip->tot_len = htons((ip->ihl * 4) + (tcp->doff * 4) + static_cast<std::uint16_t>(pkt.payload().size()));
     tcp->check = 0;
-    tcp->check = calc_tcp_checksum(first_packet);
+    tcp->check = calc_tcp_checksum(pkt);
 
     Packet second_packet = create_packet_from(pkt_view, part2);
     second_packet.action.action = PacketAction::Action::SEND;
     second_packet.action.packet_id = 0;
 
     tcp = static_cast<tcphdr*>(second_packet.transport_hdr());
-    tcp->seq = htonl(ntohl(tcp->seq) + static_cast<std::uint32_t>(part1.size()));
+    tcp->seq = htonl(ntohl(tcp->seq) + static_cast<std::uint32_t>(pkt.payload().size()));
     tcp->check = 0;
     tcp->check = calc_tcp_checksum(second_packet);
 
-    iter = vec.erase(iter);
-    iter = vec.insert(iter, std::move(first_packet));
     vec.insert(iter + 1, std::move(second_packet));
 
     return true;

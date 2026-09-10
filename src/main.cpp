@@ -98,6 +98,10 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(create_packet(cfed_pkt));
             }
 
+            if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE) {
+                std::println("THIS tls handshake was split across {} segments", packets.size());
+            }
+
             ctx->modifier->modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
