@@ -34,6 +34,16 @@ struct Context
     int raw_sock;
 };
 
+
+
+void print_as_array(std::string_view name, std::span<const char> data) {
+    std::print("unsigned char {}[] = {{", name);
+    for (size_t i = 0; i < data.size(); ++i) {
+        std::print("{}0x{:02x}", i ? ", " : "", data[i]);
+    }
+    std::println("}};");
+}
+
 int cb_loop(const struct nlmsghdr *nlh, void *data)
 {
     auto *ctx = static_cast<Context *>(data);
@@ -100,6 +110,8 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
             if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE) {
                 std::println("THIS tls handshake was split across {} segments", packets.size());
+                print_as_array("tls_packet_1", packets[0].packet);
+                print_as_array("tls_packet_2", packets[1].packet);
             }
 
             ctx->modifier->modify(packets, conn);

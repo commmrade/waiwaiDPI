@@ -55,6 +55,7 @@ add_executable(tests
         ../src/modifiers/modifier.cpp
         tcp_state_tests.cpp
         http_modifier_tests.cpp
+        tls_modifier_tests.cpp
 )
 target_link_libraries(
   tests

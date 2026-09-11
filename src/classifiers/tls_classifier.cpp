@@ -10,8 +10,13 @@
 
 ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketView &pkt, std::optional<std::size_t> tls_len)
 {
+    constexpr auto TLS_RECORD_MAX_SIZE = 1 << 14;
     if (conn.get_reasm_frags().empty() && tls_len.has_value()) {
-        conn.set_reasm_total_size(tls_len.value() + 5);
+        if (tls_len.value() > TLS_RECORD_MAX_SIZE) {
+            return ParseResult::ERROR;
+        }
+
+        conn.set_reasm_total_size(tls_len.value());
         conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
     }
 
@@ -59,8 +64,8 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker&
     std::memcpy(&tls_len, pkt.payload.data() + 3, sizeof(std::uint16_t));
     tls_len = ntohs(tls_len);
 
-    if (pkt.payload.size() < tls_len) {// fragmented, fuck
-        return buffer_pkt(conn, pkt, std::optional{tls_len});
+    if (pkt.payload.size() < tls_len + TLS_HDR_LEN) {// fragmented, fuck
+        return buffer_pkt(conn, pkt, std::optional{tls_len + TLS_HDR_LEN});
     }
 
     conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
