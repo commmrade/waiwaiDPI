@@ -28,7 +28,7 @@ ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketVie
     }
 
     if (!conn.get_reasm_frags().empty()) {
-        if (conn.get_reasm_pos() == conn.get_reasm_total_size()) {
+        if (conn.get_reasm_pos() >= conn.get_reasm_total_size()) {
             return ParseResult::SUCCESS_REASSEMBLED;// we got the whole TLS client hello, hooray
         }
     }

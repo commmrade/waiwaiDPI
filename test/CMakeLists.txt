@@ -53,6 +53,7 @@ add_executable(tests
         ../src/modifiers/http_host_modifier.cpp
         ../src/checksum.cpp
         ../src/modifiers/modifier.cpp
+        ../src/modifiers/tls_modifier.cpp
         tcp_state_tests.cpp
         http_modifier_tests.cpp
         tls_modifier_tests.cpp
