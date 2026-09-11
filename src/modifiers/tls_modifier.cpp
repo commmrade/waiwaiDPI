@@ -151,7 +151,7 @@ bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
     const auto& sni_str = sni_opt.value();
     const auto sni_str_pos = std::distance(static_cast<const char*>(full_payload.data()), sni_str.data());
 
-    constexpr auto SPLIT_POS = 3;
+    constexpr auto SPLIT_POS = 5;
     const auto split_at_global_pos = static_cast<std::size_t>(sni_str_pos) + SPLIT_POS;
     if (split_at_global_pos >= full_payload.size()) {
         std::print(std::cerr, "Split pos is really wrong, reduce it.");

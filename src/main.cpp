@@ -108,12 +108,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(create_packet(cfed_pkt));
             }
 
-            if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE) {
-                std::println("THIS tls handshake was split across {} segments", packets.size());
-                print_as_array("tls_packet_1", packets[0].packet);
-                print_as_array("tls_packet_2", packets[1].packet);
-            }
-
             ctx->modifier->modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
@@ -238,12 +232,13 @@ int main(int argc, char *argv[])
     ConnTracker tracker{};
 
     Classifier cfier{ tracker };
-    cfier.add(std::make_unique<HttpClassifier>());
+    // cfier.add(std::make_unique<HttpClassifier>());
     cfier.add(std::make_unique<TlsHandshakeClassifier>());
 
     Modifier modifier;
-    modifier.add(std::make_unique<HttpHostModifier>());
+    // modifier.add(std::make_unique<HttpHostModifier>());
     modifier.add(std::make_unique<TlsHandshakeModifier>());
+    modifier.add(std::make_unique<DumbassModifier>());
 
     Context ctx{};
     ctx.sock = socket;
