@@ -13,6 +13,7 @@ ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketVie
     constexpr auto TLS_RECORD_MAX_SIZE = 1 << 14;
     if (conn.get_reasm_frags().empty() && tls_len.has_value()) {
         if (tls_len.value() > TLS_RECORD_MAX_SIZE) {
+            conn.set_done(true);
             return ParseResult::ERROR;
         }
 
@@ -29,6 +30,7 @@ ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketVie
 
     if (!conn.get_reasm_frags().empty()) {
         if (conn.get_reasm_pos() >= conn.get_reasm_total_size()) {
+            conn.set_done(true);
             return ParseResult::SUCCESS_REASSEMBLED;// we got the whole TLS client hello, hooray
         }
     }
@@ -47,7 +49,8 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker&
 
     constexpr auto TLS_HDR_LEN = 5;
     if (pkt.payload.size() < TLS_HDR_LEN) {
-        return ParseResult::ERROR;// weird shit, packet is probably broken
+        // Don't do conn.set_done(true) here, because it can get here when the host sends a SYN[/ACK]packet
+        return ParseResult::ERROR;
     }
 
     constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
@@ -57,6 +60,7 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker&
         pkt.payload[1] != TLS_VERSION_MAJOR ||
         (pkt.payload[2] != 0x01 && pkt.payload[2] != 0x03))
     {
+        conn.set_done(true);
         return ParseResult::ERROR; // not a TLS handshake
     }
 
@@ -70,5 +74,6 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker&
 
     conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
 
+    conn.set_done(true);
     return ParseResult::SUCCESS;
 }
