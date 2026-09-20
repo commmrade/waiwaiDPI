@@ -27,10 +27,10 @@ add_executable(main main.cpp
         checksum.hpp
         modifiers/modifier.cpp
         hash.hpp
-        classifiers/empty_classifier.cpp
-        classifiers/empty_classifier.hpp
         modifiers/tls_modifier.cpp
         modifiers/tls_modifier.hpp
+        profile.cpp
+        profile.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
@@ -40,6 +40,8 @@ target_link_libraries(
           waiwaiDPI::waiwaiDPI_warnings
           spdlog::spdlog
           lefticus::tools
+          argh
+          tomlplusplus
           ${MNL_LIBRARIES}
           ${NETFILTER_QUEUE_LIBRARIES})
 

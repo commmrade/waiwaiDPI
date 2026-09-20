@@ -22,6 +22,32 @@ function(waiwaiDPI_setup_dependencies)
       "SPDLOG_FMT_EXTERNAL ON")
   endif()
 
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+  if (NOT TARGET argh::argh)
+    cpmaddpackage(
+      NAME
+      argh
+      VERSION
+      1.3.2
+      GITHUB_REPOSITORY
+      "adishavit/argh"
+      SYSTEM
+      YES
+    )
+  endif()
+
+  if (NOT TARGET tomlplusplus::tomlplusplus)
+    cpmaddpackage(
+      NAME
+      tomlplusplus
+      GIT_TAG master
+      GITHUB_REPOSITORY
+      "marzer/tomlplusplus"
+      SYSTEM
+      YES
+    )
+  endif ()
+
   if(NOT TARGET Catch2::Catch2WithMain)
     cpmaddpackage(
       NAME

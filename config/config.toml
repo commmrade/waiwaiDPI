@@ -1,0 +1,19 @@
+[profile.1]
+port = 443
+protocol = "tcp"
+
+[[profile.1.classifiers]]
+name = "tls_handshake_classifier"
+
+[[profile.1.modifiers]]
+name = "tls_handshake_modifier"
+
+[profile.2]
+port = 80
+protocol = "tcp"
+
+[[profile.2.classifiers]]
+name = "http_classifier"
+
+[[profile.2.modifiers]]
+name = "http_host_modifier"

@@ -13,6 +13,10 @@ class TlsHandshakeModifier : public IModifier
 public:
     bool modify(std::vector<Packet> &vec) override;
     bool matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const override;
+    [[nodiscard]] static constexpr std::string_view name()
+    {
+        return std::string_view{"tls_handshake_modifier"};
+    }
 };
 
 

@@ -3,10 +3,12 @@
 //
 
 #include "tls_modifier.hpp"
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include <spdlog/spdlog.h>
+#include "../checksum.hpp"
 #include <cassert>
 #include <iostream>
 #include <print>
-#include "../checksum.hpp"
 
 // <new span, success>
 static bool safe_subspan(std::span<const char>& span, const std::size_t offset)
@@ -175,6 +177,7 @@ bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
     }
 
     auto& pkt = *iter;
+    SPDLOG_DEBUG("SNI '{}' was found in packet with id {}", sni_opt.value(), pkt.action.packet_id);
     const auto pkt_view = parse_packet_view(pkt);
     const auto pkt_payload = pkt.payload();
     const std::span<const char> part2{std::next(pkt_payload.begin(), static_cast<std::ptrdiff_t>(split_pos_relative_to_packet)), pkt_payload.end()};

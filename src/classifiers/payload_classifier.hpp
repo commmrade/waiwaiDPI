@@ -7,6 +7,9 @@
 #include <cstdint>
 #include "../protocol.hpp"
 
+#include <string_view>
+#include <optional>
+#include <toml++/impl/table.hpp>
 
 class ConnTracker;
 struct PacketView;
@@ -23,7 +26,10 @@ class PayloadClassifier //NOLINT
 public:
     virtual ~PayloadClassifier() = default;
     virtual ParseResult classify(const PacketView& pkt, ConnTracker& tracker) = 0;
+
+    virtual void parse_config([[maybe_unused]] const toml::table* table) {}
     [[nodiscard]] virtual constexpr L7Proto protocol() const = 0;
+    // [[nodiscard]] virtual constexpr std::string_view name() const = 0;
 };
 
 #endif// WAIWAIDPI_PAYLOAD_CLASSIFIER_HPP

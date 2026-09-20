@@ -15,6 +15,10 @@ class TlsHandshakeClassifier final : public PayloadClassifier
 public:
     ParseResult classify(const PacketView &pkt, ConnTracker& tracker) override;
     [[nodiscard]] constexpr L7Proto protocol() const override { return L7Proto::TLS_HANDSHAKE; }
+    [[nodiscard]] static constexpr std::string_view name()
+    {
+        return std::string_view{"tls_handshake_classifier"};
+    }
 };
 
 #endif// WAIWAIDPI_TLS_CLASSIFIER_HPP

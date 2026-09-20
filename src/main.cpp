@@ -1,12 +1,15 @@
 #include "classifier.hpp"
 #include "conn_tracker.hpp"
 
-
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include "argh.h"
 #include "consts.hpp"
 #include "modifiers/dumbass_modifier.hpp"
 #include "modifiers/http_host_modifier.hpp"
 #include "modifiers/tls_modifier.hpp"
 #include "nfq.hpp"
+#include "profile.hpp"
+#include <spdlog/spdlog.h>
 
 #include <arpa/inet.h>
 #include <cassert>
@@ -21,14 +24,14 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <print>
+#include <toml++/toml.hpp>
 
 struct Context
 {
     mnl_socket *sock{ nullptr };
-    Classifier *classifier{ nullptr };
-
-    Modifier *modifier {nullptr};
-
+    // Classifier *classifier{ nullptr };
+    // Modifier *modifier {nullptr};
+    std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>* profiles;
     ConnTracker *tracker{ nullptr };
 
     int raw_sock;
@@ -79,6 +82,8 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     inet_ntop(AF_INET, &packet.network_hdr->saddr, ip_src.data(), ip_src.size());
     inet_ntop(AF_INET, &packet.network_hdr->daddr, ip_dst.data(), ip_dst.size());
 
+    SPDLOG_INFO("Got a packet with id {} of size {}. {}:{} -> {}:{}", packet.packet_id, packet_len, ip_src.data(), packet.get_source_port(), ip_dst.data(), packet.get_dest_port());
+
     ctx->tracker->track(packet);
     auto &conn = ctx->tracker->get_conn(packet.network_hdr->saddr,
         packet.get_source_port(),
@@ -86,9 +91,15 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         packet.get_dest_port(),
         packet.network_hdr->protocol);
 
+    auto profile_iter = (*ctx->profiles).find({packet.get_dest_port(), packet.network_hdr->protocol});
+    assert(profile_iter != (*ctx->profiles).end());
+    auto& profile = profile_iter->second;
+
     if (!conn.is_done()) {
-        auto res = ctx->classifier->classify(packet);
+        auto res = profile.classifier.classify(packet);
         if (res == ParseResult::SUCCESS) {
+            SPDLOG_DEBUG("Packet is classified as {}", static_cast<int>(packet.payload_proto));
+
             auto &cfed_pkt = packet;
             std::vector<Packet> packets;
 
@@ -104,12 +115,13 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(create_packet(cfed_pkt));
             }
 
-            ctx->modifier->modify(packets, conn);
+            profile.modifier.modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
                 switch (send_pkt.action.action) {
                 case PacketAction::Action::ACCEPT: {
                     assert(send_pkt.action.packet_id);
+                    SPDLOG_DEBUG("Packet with id {} is ACCEPTed", send_pkt.action.packet_id);
                     ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_ACCEPT);
                     if (ret < 0) {
                         perror("send accept failed, but dont stop");
@@ -117,6 +129,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                     break;
                 }
                 case PacketAction::Action::DROP: {
+                    SPDLOG_DEBUG("Packet with id {} is DROPped", send_pkt.action.packet_id);
                     ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_DROP);
                     if (ret < 0) {
                         perror("send drop failed, dont stop");
@@ -131,6 +144,8 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                     [[fallthrough]];
                 }
                 case PacketAction::Action::SEND: {
+                    SPDLOG_DEBUG("Packet with id {} is SEND/DROP_AND_SEND", send_pkt.action.packet_id);
+
                     const auto *ip = reinterpret_cast<const iphdr *>(send_pkt.packet.data());
 
                     sockaddr_in dest_addr{};
@@ -153,16 +168,31 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
             assert(ret);
         }
     } else {
+        SPDLOG_DEBUG("Packet {} is for a connection that is done", packet.packet_id);
         ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
         assert(ret);
     }
-
 
     return MNL_CB_OK;
 }
 
 int main(int argc, char *argv[])
 {
+#if SPDLOG_ACTIVE_LEVEL <= SPDLOG_LEVEL_DEBUG
+    spdlog::set_level(spdlog::level::debug);
+#endif
+
+    argh::parser const cmdl(argc, argv);
+    std::string cfg_path;
+    if (!(cmdl("config") >> cfg_path)) {
+        throw std::runtime_error("No config path");
+        return -1;
+    }
+    std::println("cfg path: {}", cfg_path);
+
+    ConnTracker tracker{};
+    auto profiles = build_profiles(cfg_path, tracker);
+
     int ret = 0;
 
     int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -224,22 +254,11 @@ int main(int argc, char *argv[])
     ret = 1;
     mnl_socket_setsockopt(socket, NETLINK_NO_ENOBUFS, &ret, sizeof(ret));
 
-
-    ConnTracker tracker{};
-
-    Classifier cfier{ tracker };
-    // cfier.add(std::make_unique<HttpClassifier>());
-    cfier.add(std::make_unique<TlsHandshakeClassifier>());
-
-    Modifier modifier;
-    // modifier.add(std::make_unique<HttpHostModifier>());
-    modifier.add(std::make_unique<TlsHandshakeModifier>());
-    modifier.add(std::make_unique<DumbassModifier>());
-
     Context ctx{};
     ctx.sock = socket;
-    ctx.classifier = &cfier;
-    ctx.modifier = &modifier;
+    // ctx.classifier = &cfier;
+    // ctx.modifier = &modifier;
+    ctx.profiles = &profiles;
     ctx.tracker = &tracker;
     ctx.raw_sock = raw_sock;
 
@@ -249,6 +268,7 @@ int main(int argc, char *argv[])
         const auto now = std::chrono::system_clock::now();
         const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - last_check_time);
         if (dur.count() >= CHECK_DEAD_CONNECTIONS_INTERVAL_SECS) {
+            SPDLOG_DEBUG("Deleting dead connections");
             ctx.tracker->clear_dead_connections();
             last_check_time = now;
         }

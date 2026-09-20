@@ -162,6 +162,7 @@ void ConnTracker::clear_dead_connections()
 
         auto timeout = calculate_timeout(iter->second);
         if (dur.count() >= timeout) {
+            assert(iter->second.get_reasm_frags().empty()); // There can't be any packets here, because they are all processed
             iter = conns_.erase(iter);
         } else {
             ++iter;

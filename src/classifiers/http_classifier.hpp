@@ -13,6 +13,10 @@ class HttpClassifier final : public PayloadClassifier
 public:
     ParseResult classify(const PacketView &pkt, ConnTracker& tracker) override;
     [[nodiscard]] constexpr L7Proto protocol() const override { return L7Proto::HTTP; }
+    [[nodiscard]] static constexpr std::string_view name()
+    {
+        return std::string_view{"http_classifier"};
+    }
 };
 
 #endif// WAIWAIDPI_HTTP_CLASSIFIER_HPP

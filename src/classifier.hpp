@@ -31,7 +31,7 @@ private:
     std::expected<L7Proto, ParseResult> try_payload(PacketView &pkt);
 
 public:
-    explicit Classifier(ConnTracker& tracker) : tracker_(tracker) {}
+    /* explicit */ Classifier(ConnTracker& tracker) : tracker_(tracker) {}
 
     void add(std::unique_ptr<PayloadClassifier>&& classifier);
 
