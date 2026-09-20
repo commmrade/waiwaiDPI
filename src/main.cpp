@@ -4,6 +4,7 @@
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "argh.h"
 #include "consts.hpp"
+#include <signal.h>
 #include "modifiers/dumbass_modifier.hpp"
 #include "modifiers/http_host_modifier.hpp"
 #include "modifiers/tls_modifier.hpp"
@@ -24,6 +25,7 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <print>
+#include <signal.h>
 #include <toml++/toml.hpp>
 
 struct Context
@@ -176,8 +178,23 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     return MNL_CB_OK;
 }
 
+std::atomic<bool> running = true;
+
+void sig_handler(int sig)
+{
+    running.store(false);
+}
+
 int main(int argc, char *argv[])
 {
+    struct sigaction sig;
+    sig.sa_handler = sig_handler;
+
+    int ret = ::sigaction(SIGINT, &sig, nullptr);
+    if (ret < 0) {
+        throw std::runtime_error("Could not setup signal handler");
+    }
+
 #if SPDLOG_ACTIVE_LEVEL <= SPDLOG_LEVEL_DEBUG
     spdlog::set_level(spdlog::level::debug);
 #endif
@@ -193,7 +210,7 @@ int main(int argc, char *argv[])
     ConnTracker tracker{};
     auto profiles = build_profiles(cfg_path, tracker);
 
-    int ret = 0;
+    ret = 0;
 
     int raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (raw_sock < 0) {
@@ -207,6 +224,9 @@ int main(int argc, char *argv[])
         perror("setsockopt");
         return EXIT_FAILURE;
     }
+
+    ret = system("iptables -A OUTPUT -m mark --mark 0x14 -j ACCEPT");
+    assert(ret == 0);
 
     int mark = 0x14;
     ret = setsockopt(raw_sock, SOL_SOCKET, SO_MARK, &mark, sizeof(mark));
@@ -264,7 +284,8 @@ int main(int argc, char *argv[])
 
     auto last_check_time = std::chrono::system_clock::now();
 
-    for (;;) {
+    running.store(true);
+    while (running.load()) {
         const auto now = std::chrono::system_clock::now();
         const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - last_check_time);
         if (dur.count() >= CHECK_DEAD_CONNECTIONS_INTERVAL_SECS) {
@@ -274,7 +295,9 @@ int main(int argc, char *argv[])
         }
 
         ssize_t const rcvd = mnl_socket_recvfrom(socket, buf.data(), BUF_SIZE);
-        if (rcvd < 0) {
+        if (rcvd < 0 && errno == EINTR) {
+            break;
+        } else if (rcvd < 0) {
             perror("mnl_socket_recvfrom");
             return EXIT_FAILURE;
         }
@@ -285,6 +308,16 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
     }
+
+    ret = system("iptables -D OUTPUT -m mark --mark 0x14 -j ACCEPT");
+    assert(ret == 0);
+
+    for (const auto& profile : profiles) {
+        ret = system(std::format("iptables -D OUTPUT -p {} --dport {} -j NFQUEUE --queue-num 1488", profile.first.second, profile.first.first).c_str());
+        assert(ret == 0);
+    }
+
+    std::println("EXITING");
 
     mnl_socket_close(socket);
     return EXIT_SUCCESS;

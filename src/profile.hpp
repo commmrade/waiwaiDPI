@@ -73,6 +73,8 @@ inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> bui
 
     std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> ret;
 
+
+
     for (const auto& profile : *profiles) {
         const auto *const port_node = profile.second.as_table()->get("port");
         if (port_node == nullptr) {
@@ -131,6 +133,10 @@ inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> bui
             auto mdf = create_modifier(name_opt.value(), modifier_tbl);
             iter->second.modifier.add(std::move(mdf));
         }
+
+
+        // set up a rule
+        int re = system(std::format("iptables -A OUTPUT -p {} --dport {} -j NFQUEUE --queue-num 1488", protocol_str, port).c_str());
     }
 
     return ret;
