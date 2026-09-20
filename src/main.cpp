@@ -15,6 +15,7 @@
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <libmnl/libmnl.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
@@ -37,6 +38,7 @@ struct Context
     ConnTracker *tracker{ nullptr };
 
     int raw_sock;
+    std::uint32_t queue_number;
 };
 
 
@@ -124,7 +126,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 case PacketAction::Action::ACCEPT: {
                     assert(send_pkt.action.packet_id);
                     SPDLOG_DEBUG("Packet with id {} is ACCEPTed", send_pkt.action.packet_id);
-                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_ACCEPT);
+                    ret = send_verdict(ctx->sock, ctx->queue_number, send_pkt.action.packet_id, NF_ACCEPT);
                     if (ret < 0) {
                         perror("send accept failed, but dont stop");
                     }
@@ -132,14 +134,14 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
                 case PacketAction::Action::DROP: {
                     SPDLOG_DEBUG("Packet with id {} is DROPped", send_pkt.action.packet_id);
-                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_DROP);
+                    ret = send_verdict(ctx->sock, ctx->queue_number, send_pkt.action.packet_id, NF_DROP);
                     if (ret < 0) {
                         perror("send drop failed, dont stop");
                     }
                     break;
                 }
                 case PacketAction::Action::DROP_AND_SEND: {
-                    ret = send_verdict(ctx->sock, send_pkt.action.packet_id, NF_DROP);
+                    ret = send_verdict(ctx->sock, ctx->queue_number, send_pkt.action.packet_id, NF_DROP);
                     if (ret < 0) {
                         perror("send drop failed, dont stop");
                     }
@@ -166,12 +168,12 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
             }
         } else if (res == ParseResult::ERROR) {
-            ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
+            ret = send_verdict(ctx->sock, ctx->queue_number, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
             assert(ret);
         }
     } else {
         SPDLOG_DEBUG("Packet {} is for a connection that is done", packet.packet_id);
-        ret = send_verdict(ctx->sock, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
+        ret = send_verdict(ctx->sock, ctx->queue_number, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
         assert(ret);
     }
 
@@ -179,7 +181,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 }
 
 std::atomic<bool> running = true;
-
 void sig_handler(int sig)
 {
     running.store(false);
@@ -201,11 +202,19 @@ int main(int argc, char *argv[])
 
     argh::parser const cmdl(argc, argv);
     std::string cfg_path;
+    std::uint32_t queue_number = 1489;
     if (!(cmdl("config") >> cfg_path)) {
         throw std::runtime_error("No config path");
         return -1;
     }
-    std::println("cfg path: {}", cfg_path);
+    cmdl("queue-number") >> queue_number;
+
+    if (!std::filesystem::exists(cfg_path)) {
+        throw std::runtime_error(std::format("Such file '{}' does not exist", cfg_path));
+    }
+    if (queue_number > std::numeric_limits<std::uint16_t>::max()) {
+        throw std::runtime_error("Such queue number cannot be used!");
+    }
 
     ConnTracker tracker{};
     auto profiles = build_profiles(cfg_path, tracker);
@@ -253,7 +262,7 @@ int main(int argc, char *argv[])
     std::array<char, BUF_SIZE> buf{};
 
     // bind
-    nlmsghdr *hdr = nfq_nlmsg_put(buf.data(), NFQNL_MSG_CONFIG, QUEUE_NUMBER);
+    nlmsghdr *hdr = nfq_nlmsg_put(buf.data(), NFQNL_MSG_CONFIG, queue_number);
     nfq_nlmsg_cfg_put_cmd(hdr, AF_INET, NFQNL_CFG_CMD_BIND);
     ssize_t sent = mnl_socket_sendto(socket, hdr, hdr->nlmsg_len);
     if (sent < 0) {
@@ -262,7 +271,7 @@ int main(int argc, char *argv[])
     }
 
     // configure
-    hdr = nfq_nlmsg_put(buf.data(), NFQNL_MSG_CONFIG, QUEUE_NUMBER);
+    hdr = nfq_nlmsg_put(buf.data(), NFQNL_MSG_CONFIG, queue_number);
     nfq_nlmsg_cfg_put_params(hdr, NFQNL_COPY_PACKET, BUF_SIZE);
 
     sent = mnl_socket_sendto(socket, hdr, hdr->nlmsg_len);
@@ -281,6 +290,7 @@ int main(int argc, char *argv[])
     ctx.profiles = &profiles;
     ctx.tracker = &tracker;
     ctx.raw_sock = raw_sock;
+    ctx.queue_number = queue_number;
 
     auto last_check_time = std::chrono::system_clock::now();
 

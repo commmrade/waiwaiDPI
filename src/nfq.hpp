@@ -7,8 +7,6 @@
 #include <cstdint>
 #include <libmnl/libmnl.h>
 
-constexpr int QUEUE_NUMBER = 1488;
-
-int send_verdict(mnl_socket *sock, const std::uint32_t packet_id, int verd);
+int send_verdict(mnl_socket *sock, const std::uint32_t queue_number, const std::uint32_t packet_id, int verd);
 
 #endif// WAIWAIDPI_NFQ_HPP

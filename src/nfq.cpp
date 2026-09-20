@@ -6,10 +6,10 @@
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <libnetfilter_queue/linux_nfnetlink_queue.h>
 
-int send_verdict(mnl_socket* sock, const std::uint32_t packet_id, int verd)
+int send_verdict(mnl_socket* sock, const std::uint32_t queue_number, const std::uint32_t packet_id, int verd)
 {
     std::array<char, 512> buf{};
-    nlmsghdr* msg = nfq_nlmsg_put(buf.data(), NFQNL_MSG_VERDICT, QUEUE_NUMBER);
+    nlmsghdr* msg = nfq_nlmsg_put(buf.data(), NFQNL_MSG_VERDICT, queue_number);
     nfq_nlmsg_verdict_put(msg, static_cast<int>(packet_id), verd);
 
     ssize_t sent = mnl_socket_sendto(sock, msg, msg->nlmsg_len);
