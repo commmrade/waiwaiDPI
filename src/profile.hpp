@@ -5,6 +5,7 @@
 #ifndef WAIWAIDPI_PROFILE_HPP
 #define WAIWAIDPI_PROFILE_HPP
 #include "classifier.hpp"
+#include "iptables.hpp"
 #include "modifiers/dumbass_modifier.hpp"
 #include "modifiers/http_host_modifier.hpp"
 #include "modifiers/modifier.hpp"
@@ -63,7 +64,7 @@ inline std::unique_ptr<IModifier> create_modifier(const std::string_view name, c
     }
 }
 
-inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> build_profiles(const std::string_view cfg_path, ConnTracker& tracker)
+inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> build_profiles(const std::string_view cfg_path, ConnTracker& tracker, const std::uint32_t queue_number)
 {
     toml::table tbl = toml::parse_file(cfg_path);
     const toml::table* profiles = tbl["profile"].as_table();
@@ -136,7 +137,9 @@ inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> bui
 
 
         // set up a rule
-        int re = system(std::format("iptables -A OUTPUT -p {} --dport {} -j NFQUEUE --queue-num 1488", protocol_str, port).c_str());
+        if (!rule_exists(std::format("-A OUTPUT -p {} --dport {} -m {} -j NFQUEUE --queue-num {}", protocol_str, protocol_str, port, queue_number))) {
+            rule_add(std::format("iptables -A OUTPUT -p {} --dport {} -j NFQUEUE --queue-num {}", protocol_str, port, queue_number));
+        }
     }
 
     return ret;

@@ -4,12 +4,14 @@
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "argh.h"
 #include "consts.hpp"
-#include <signal.h>
+#include "iptables.hpp"
+
 #include "modifiers/dumbass_modifier.hpp"
 #include "modifiers/http_host_modifier.hpp"
 #include "modifiers/tls_modifier.hpp"
 #include "nfq.hpp"
 #include "profile.hpp"
+#include <signal.h>
 #include <spdlog/spdlog.h>
 
 #include <arpa/inet.h>
@@ -216,8 +218,13 @@ int main(int argc, char *argv[])
         throw std::runtime_error("Such queue number cannot be used!");
     }
 
+    int mark = 0x14;
+    if (!rule_exists(std::format("-A OUTPUT -m mark --mark {} -j ACCEPT", mark))) {
+        rule_add(std::format("iptables -A OUTPUT -m mark --mark {} -j ACCEPT", mark));
+    }
+
     ConnTracker tracker{};
-    auto profiles = build_profiles(cfg_path, tracker);
+    auto profiles = build_profiles(cfg_path, tracker, queue_number);
 
     ret = 0;
 
@@ -234,10 +241,6 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    ret = system("iptables -A OUTPUT -m mark --mark 0x14 -j ACCEPT");
-    assert(ret == 0);
-
-    int mark = 0x14;
     ret = setsockopt(raw_sock, SOL_SOCKET, SO_MARK, &mark, sizeof(mark));
     if (ret < 0) {
         perror("setsockopt");
@@ -319,15 +322,18 @@ int main(int argc, char *argv[])
         }
     }
 
-    ret = system("iptables -D OUTPUT -m mark --mark 0x14 -j ACCEPT");
-    assert(ret == 0);
-
     for (const auto& profile : profiles) {
-        ret = system(std::format("iptables -D OUTPUT -p {} --dport {} -j NFQUEUE --queue-num 1488", profile.first.second, profile.first.first).c_str());
-        assert(ret == 0);
+        std::string protocol_str;
+        if (profile.first.second == IPPROTO_TCP) {
+            protocol_str = "tcp";
+        } else if (profile.first.second == IPPROTO_UDP) {
+            protocol_str = "udp";
+        } else {
+            throw std::runtime_error("Unknown protocol");
+        }
+        rule_remove(std::format("iptables -D OUTPUT -p {} -m {} --dport {} -j NFQUEUE --queue-num {}", protocol_str, protocol_str, profile.first.first, queue_number).c_str());
     }
-
-    std::println("EXITING");
+    rule_remove(std::format("iptables -D OUTPUT -m mark --mark {} -j ACCEPT", mark));
 
     mnl_socket_close(socket);
     return EXIT_SUCCESS;
