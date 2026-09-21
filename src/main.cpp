@@ -183,6 +183,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 }
 
 std::atomic<bool> running = true;
+static_assert(std::atomic<bool>::is_always_lock_free && "Atomic cannot be used in signal handler on this platform");
 void sig_handler(int sig)
 {
     running.store(false);
