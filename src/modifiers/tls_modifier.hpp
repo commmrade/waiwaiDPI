@@ -9,6 +9,7 @@
 
 class TlsHandshakeModifier : public IModifier
 {
+    std::size_t split_at_pos_{0};
     [[nodiscard]] static std::optional<std::string_view> get_sni(std::span<const char> payload);
 public:
     bool modify(std::vector<Packet> &vec) override;
@@ -17,6 +18,7 @@ public:
     {
         return std::string_view{"tls_handshake_modifier"};
     }
+    void parse_config(const toml::table *table) override;
 };
 
 
