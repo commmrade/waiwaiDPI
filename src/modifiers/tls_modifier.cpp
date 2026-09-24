@@ -174,7 +174,7 @@ static std::size_t calculate_split_offset(const Split& split, const std::size_t 
 
 bool TlsHandshakeModifier::modify(std::vector<Packet> &vec, const Connection& conn)
 {
-    return split::split(vec, split_at_, conn);
+    return split::split(vec, split::SplitConfig{split_at_, std::nullopt}, conn);
 }
 
 bool TlsHandshakeModifier::matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const

@@ -20,7 +20,7 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
         }
 
         for (const auto& split_pos : splits_) {
-            if (!split::split(vec, split_pos, full_payload, conn)) {
+            if (!split::split(vec, split::SplitConfig{split_pos, allowed_hosts_}, conn)) {
                 SPDLOG_WARN("Wasn't able to split packet at {}:{}", split_pos.arg, split_pos.offset);
                 failed = true;
             }
@@ -37,10 +37,10 @@ bool Splitter::matches([[maybe_unused]] const std::uint8_t l4_proto, [[maybe_unu
 
 void Splitter::parse_config(const toml::table *table)
 {
-    const auto split_node = table->get("split_at");
+    const auto* split_node = table->get("split_at");
     if (split_node != nullptr) {
         if (!split_node->is_array()) {
-            throw std::runtime_error(std::format("split_at should be an array for '{}'", Splitter::name()));
+            throw std::runtime_error(std::format("split_at must be an array for '{}'", Splitter::name()));
         }
 
         for (const auto& node : *split_node->as_array()) {
@@ -55,5 +55,24 @@ void Splitter::parse_config(const toml::table *table)
         }
     } else {
         SPDLOG_WARN("'split_at' parameter for {} is not specified, but it defaults to 0", Splitter::name());
+    }
+
+    const auto* hosts_node = table->get("allowed_hosts");
+    if (hosts_node != nullptr) {
+        auto& allowed_hosts = allowed_hosts_.emplace();
+
+        if (!hosts_node->is_array()) {
+            throw std::runtime_error("allowed_hosts must be an array");
+        }
+
+        const auto* hosts_array = hosts_node->as_array();
+        allowed_hosts.reserve(hosts_array->size());
+        for (const auto& node : *hosts_array) {
+            if (!node.is_string()) {
+                throw std::runtime_error("All hosts must be strings");
+            }
+
+            allowed_hosts.insert(node.as_string()->get());
+        }
     }
 }

@@ -9,15 +9,22 @@
 #include "../split.hpp"
 
 
+#include <unordered_set>
 #include <vector>
 
 namespace split {
-    bool split(std::vector<Packet>& packets, const Split& pos, const Connection& conn);
-    bool split(std::vector<Packet>& packets, const Split& pos, const std::vector<char>& full_payload, const Connection& conn);
+    struct SplitConfig
+    {
+        const Split& pos;
+        const std::optional<std::unordered_set<std::string>>& hosts;
+    };
 
-    bool split_http(std::vector<Packet>& packets, const Split& pos, const std::vector<char>& full_payload);
-    bool split_tls(std::vector<Packet>& packets, const Split& pos, const std::vector<char>& full_payload);
-    bool split_other(std::vector<Packet>& packets, const Split& pos, const std::vector<char>& full_payload);
+    bool split(std::vector<Packet>& packets, const SplitConfig& cfg, const Connection& conn);
+    bool split(std::vector<Packet>& packets, const SplitConfig& cfg, const std::vector<char>& full_payload, const Connection& conn);
+
+    bool split_http(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
+    bool split_tls(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
+    bool split_other(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
 }
 
 #endif// WAIWAIDPI_SPLIT_HPP

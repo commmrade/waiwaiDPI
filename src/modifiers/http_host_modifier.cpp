@@ -22,7 +22,7 @@ static bool host_list(const std::string_view hostname)
 
 bool HttpHostModifier::modify(std::vector<Packet> &vec, const Connection& conn)
 {
-    return split::split(vec, split_at_, conn);
+    return split::split(vec, split::SplitConfig{split_at_, std::nullopt}, conn);
 }
 bool HttpHostModifier::matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const
 {

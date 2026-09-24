@@ -7,9 +7,13 @@
 #include "modifier.hpp"
 #include "split.hpp"
 
+#include <unordered_set>
+
 class Splitter : public IModifier
 {
     std::vector<Split> splits_;
+    std::optional<std::unordered_set<std::string>> allowed_hosts_; // if std::nullopt, then let everything through
+    // std::optional<std::uint32_t> allowed_ips_;
 public:
     [[nodiscard]] bool modify(std::vector<Packet> &vec, const Connection& conn) override;
     [[nodiscard]] bool matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const override;
