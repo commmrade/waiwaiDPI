@@ -13,6 +13,7 @@
 
 namespace split {
     bool split(std::vector<Packet>& packets, const Split& pos, const Connection& conn);
+    bool split(std::vector<Packet>& packets, const Split& pos, const std::vector<char>& full_payload, const Connection& conn);
 
     bool split_http(std::vector<Packet>& packets, const Split& pos, const std::vector<char>& full_payload);
     bool split_tls(std::vector<Packet>& packets, const Split& pos, const std::vector<char>& full_payload);

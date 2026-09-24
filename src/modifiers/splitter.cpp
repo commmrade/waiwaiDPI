@@ -13,8 +13,14 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
     // Go through each split and split at that position
     bool failed = false;
     if (!splits_.empty()) {
+        std::vector<char> full_payload;
+        for (const auto& pkt : vec) {
+            const auto payload = pkt.payload();
+            full_payload.insert(full_payload.end(), payload.begin(), payload.end());
+        }
+
         for (const auto& split_pos : splits_) {
-            if (!split::split(vec, split_pos, conn)) {
+            if (!split::split(vec, split_pos, full_payload, conn)) {
                 SPDLOG_WARN("Wasn't able to split packet at {}:{}", split_pos.arg, split_pos.offset);
                 failed = true;
             }

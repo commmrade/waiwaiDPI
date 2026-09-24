@@ -223,6 +223,15 @@ bool split::split(std::vector<Packet> &packets, const Split &pos, const Connecti
     }
 
     // split based on application protocol, each protocol have a unique set of usable markers
+    return split(packets, pos, full_payload, conn);
+}
+
+bool split::split(std::vector<Packet> &packets,
+    const Split &pos,
+    const std::vector<char> &full_payload,
+    const Connection &conn)
+{
+    // split based on application protocol, each protocol have a unique set of usable markers
     switch (const auto pl_proto = conn.payload_proto()) {
     case L7Proto::HTTP: {
         return split_http(packets, pos, full_payload);
