@@ -6,9 +6,9 @@
 #define WAIWAIDPI_PROFILE_HPP
 #include "classifier.hpp"
 #include "iptables.hpp"
-#include "modifiers/dumbass_modifier.hpp"
 #include "modifiers/http_host_modifier.hpp"
 #include "modifiers/modifier.hpp"
+#include "modifiers/splitter.hpp"
 #include "modifiers/tls_modifier.hpp"
 
 #include <print>
@@ -55,8 +55,8 @@ inline std::unique_ptr<IModifier> create_modifier(const std::string_view name, c
         auto ret = std::make_unique<HttpHostModifier>();
         ret->parse_config(table);
         return ret;
-    } else if (name == DumbassModifier::name()) {
-        auto ret = std::make_unique<DumbassModifier>();
+    } else if (name == Splitter::name()) {
+        auto ret = std::make_unique<Splitter>();
         ret->parse_config(table);
         return ret;
     } else {

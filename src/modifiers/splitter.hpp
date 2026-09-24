@@ -1,0 +1,25 @@
+//
+// Created by klewy on 9/24/26.
+//
+
+#ifndef WAIWAIDPI_SPLITTER_HPP
+#define WAIWAIDPI_SPLITTER_HPP
+#include "modifier.hpp"
+#include "split.hpp"
+
+class Splitter : public IModifier
+{
+    std::vector<Split> splits_;
+public:
+    [[nodiscard]] bool modify(std::vector<Packet> &vec, const Connection& conn) override;
+    [[nodiscard]] bool matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const override;
+    void parse_config(const toml::table *table) override;
+
+    [[nodiscard]] static constexpr std::string_view name()
+    {
+        return std::string_view{"splitter"};
+    }
+};
+
+
+#endif// WAIWAIDPI_SPLITTER_HPP

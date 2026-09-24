@@ -6,7 +6,6 @@
 #include "consts.hpp"
 #include "iptables.hpp"
 
-#include "modifiers/dumbass_modifier.hpp"
 #include "modifiers/http_host_modifier.hpp"
 #include "modifiers/tls_modifier.hpp"
 #include "nfq.hpp"

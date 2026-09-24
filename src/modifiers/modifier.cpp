@@ -11,7 +11,7 @@ bool Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
             continue;
         }
 
-        if (modifier->modify(vec)) {
+        if (modifier->modify(vec, conn)) {
             updated = true;
         }
     }

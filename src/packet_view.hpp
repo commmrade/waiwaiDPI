@@ -63,6 +63,8 @@ struct Packet
 
     PacketAction action{ .packet_id = 0, .action = PacketAction::Action::SEND };
 
+    bool orig_packet{true}; // if false, then used in algorithms
+
     iphdr* network_hdr()
     {
         return reinterpret_cast<iphdr*>(std::next(packet.data(), network_offset));

@@ -15,7 +15,7 @@ class IModifier
 {
 public:
     virtual ~IModifier() = default;
-    virtual bool modify(std::vector<Packet>& vec) = 0; // true - successfully processed, false - did nothing
+    virtual bool modify(std::vector<Packet>& vec, const Connection& conn) = 0; // true - successfully processed, false - did nothing
     [[nodiscard]] virtual bool matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const = 0; // used to make sure that these packets can be processed by this modifier
     virtual void parse_config([[maybe_unused]] const toml::table* table) {}
     // [[nodiscard]] virtual constexpr std::string_view name() const = 0;
