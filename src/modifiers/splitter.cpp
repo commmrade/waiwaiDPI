@@ -8,8 +8,26 @@
 
 #include "algorithms/split.hpp"
 
+#include <arpa/inet.h>
+
+bool Splitter::check_ip(const std::vector<Packet> &packets) const
+{
+    assert(!packets.empty());
+    if (allowed_ips_.has_value()) {
+        const auto addr = packets.front().network_hdr()->daddr;
+        if (!allowed_ips_.value().contains(addr)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
 {
+    if (!check_ip(vec)) {
+        return false;
+    }
+
     // Go through each split and split at that position
     bool failed = false;
     if (!splits_.empty()) {
@@ -73,6 +91,32 @@ void Splitter::parse_config(const toml::table *table)
             }
 
             allowed_hosts.insert(node.as_string()->get());
+        }
+    }
+
+    const auto* ips_node = table->get("allowed_ips");
+    if (ips_node != nullptr) {
+        auto& allowed_ips = allowed_ips_.emplace();
+
+        if (!ips_node->is_array()) {
+            throw std::runtime_error("allowed_ips must be an array");
+        }
+
+        const auto* ips_array = ips_node->as_array();
+        allowed_ips.reserve(ips_array->size());
+        for (const auto& node : *ips_array) {
+            if (!node.is_string()) {
+                throw std::runtime_error("All ips must be strings");
+            }
+
+            const auto addr_str = node.as_string()->get();
+            std::uint32_t addr = 0;
+            int ret = inet_pton(AF_INET, addr_str.data(), &addr);
+            if (ret != 1) {
+                throw std::runtime_error(std::format("Could not convert address '{}'", addr_str));
+            }
+
+            allowed_ips.insert(addr);
         }
     }
 }
