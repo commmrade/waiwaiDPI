@@ -4,8 +4,10 @@
 
 #include "tls_modifier.hpp"
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include <spdlog/spdlog.h>
 #include "../checksum.hpp"
+#include "algorithms/split.hpp"
+#include <spdlog/spdlog.h>
+
 #include <cassert>
 #include <iostream>
 #include <print>
@@ -172,72 +174,7 @@ static std::size_t calculate_split_offset(const Split& split, const std::size_t 
 
 bool TlsHandshakeModifier::modify(std::vector<Packet> &vec, const Connection& conn)
 {
-    std::vector<char> full_payload;
-    for (const auto& pkt : vec) {
-        const auto payload = pkt.payload();
-        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
-    }
-
-    // Parse and find the SNI extension
-    const auto sni_opt = get_sni(full_payload);
-    if (!sni_opt.has_value()) {
-        std::println(std::cerr, "SNI Extension was not found in this handshake");
-        return false;
-    }
-
-    const auto& sni_str = sni_opt.value();
-    const auto sni_str_pos = std::distance(static_cast<const char*>(full_payload.data()), sni_str.data());
-
-    const auto split_at_global_pos = static_cast<std::size_t>(sni_str_pos) + calculate_split_offset(split_at_, sni_str.size());
-    if (split_at_global_pos >= full_payload.size()) {
-        std::print(std::cerr, "Split pos is really wrong, reduce it.");
-        return false;
-    }
-
-    auto iter = vec.begin();
-    std::size_t offset = 0;
-    std::size_t split_pos_relative_to_packet = 0;
-    for (; iter != vec.end(); ++iter) {
-        offset += iter->payload().size();
-        if (split_at_global_pos < offset) {
-            split_pos_relative_to_packet = split_at_global_pos - (offset - iter->payload().size());
-            break;
-        }
-    }
-    assert(iter != vec.end());
-
-    if (split_pos_relative_to_packet == 0) { // split is naturally at packet borders
-        return false;
-    }
-
-    auto& pkt = *iter;
-    SPDLOG_DEBUG("SNI '{}' was found in packet with id {}", sni_opt.value(), pkt.action.packet_id);
-    const auto pkt_view = parse_packet_view(pkt);
-    const auto pkt_payload = pkt.payload();
-    const std::span<const char> part2{std::next(pkt_payload.begin(), static_cast<std::ptrdiff_t>(split_pos_relative_to_packet)), pkt_payload.end()};
-
-    pkt.packet.resize(pkt.packet.size() - part2.size());
-    pkt.action.action = PacketAction::Action::DROP_AND_SEND;
-
-    auto* tcp = static_cast<tcphdr*>(pkt.transport_hdr());
-    auto* ip = pkt.network_hdr();
-
-    ip->tot_len = htons((ip->ihl * 4) + (tcp->doff * 4) + static_cast<std::uint16_t>(pkt.payload().size()));
-    tcp->check = 0;
-    tcp->check = calc_tcp_checksum(pkt);
-
-    Packet second_packet = create_packet_from(pkt_view, part2);
-    second_packet.action.action = PacketAction::Action::SEND;
-    second_packet.action.packet_id = 0;
-
-    tcp = static_cast<tcphdr*>(second_packet.transport_hdr());
-    tcp->seq = htonl(ntohl(tcp->seq) + static_cast<std::uint32_t>(pkt.payload().size()));
-    tcp->check = 0;
-    tcp->check = calc_tcp_checksum(second_packet);
-
-    vec.insert(iter + 1, std::move(second_packet));
-
-    return true;
+    return split::split(vec, split_at_, conn);
 }
 
 bool TlsHandshakeModifier::matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const
