@@ -4,7 +4,6 @@
 
 #include "dumbass_modifier.hpp"
 #include <print>
-#include "../../out/build/unixlike-gcc-debug/_deps/catch2-src/src/catch2/matchers/catch_matchers_floating_point.hpp"
 #include "../checksum.hpp"
 
 bool DumbassModifier::modify(std::vector<Packet> &vec)

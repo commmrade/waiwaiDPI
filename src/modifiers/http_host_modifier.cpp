@@ -5,11 +5,13 @@
 #include "http_host_modifier.hpp"
 
 #include "../checksum.hpp"
-#include <ranges>
+#include "spdlog/spdlog.h"
+
 #include <cassert>
 #include <cstring>
 #include <iostream>
 #include <print>
+#include <ranges>
 
 
 static bool host_list(const std::string_view hostname)
@@ -36,9 +38,15 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
         return false;
     }
     const auto host_pos = std::distance(payload_str.begin(), host_subrange.begin());
+    const auto host_end = payload_str.find("\r\n", host_pos);
+    if (host_end == std::string::npos) {
+        std::println(std::cerr, "[http_modifier]: Host header end is not found");
+        return false;
+    }
 
-    constexpr auto SPLIT_AT = HOST_HEADER_NAME.size() + 3;
-    const auto split_at_global_pos = static_cast<std::size_t>(host_pos) + SPLIT_AT;
+    std::string_view const host{payload_str.data() + host_pos + HOST_HEADER_NAME.size() + 1, payload_str.data() + host_end};
+
+    const auto split_at_global_pos = static_cast<std::size_t>(host_pos) + HOST_HEADER_NAME.size() + calculate_split_offset(split_at_, host.size()) + 1;
     assert(split_at_global_pos < payload_str.size());
 
     auto iter = vec.begin();
@@ -88,4 +96,19 @@ bool HttpHostModifier::modify(std::vector<Packet> &vec)
 bool HttpHostModifier::matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const
 {
     return l7_proto == L7Proto::HTTP && l4_proto == IPPROTO_TCP;
+}
+void HttpHostModifier::parse_config(const toml::table *table)
+{
+    const auto split_node = table->get("split_at");
+    if (split_node != nullptr) {
+        if (split_node->is_number()) {
+            split_at_.offset = static_cast<std::size_t>(split_node->as_integer()->get());
+        } else {
+            // Supported values: hoststart, hostend, hostmid, numbers (relative from hoststart start)
+            const auto split_str = split_node->as_string()->get();
+            split_at_ = parse_split(split_str);
+        }
+    } else {
+        SPDLOG_WARN("'split_at' parameter for {} is not specified, but it defaults to 0", HttpHostModifier::name());
+    }
 }

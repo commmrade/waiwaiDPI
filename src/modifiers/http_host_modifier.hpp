@@ -6,10 +6,11 @@
 #define WAIWAIDPI_HTTP_HOST_MODIFIER_HPP
 
 #include "modifier.hpp"
-
+#include "split.hpp"
 
 class HttpHostModifier final : public IModifier
 {
+    Split split_at_{};
 public:
     bool modify(std::vector<Packet> &vec) override;
     [[nodiscard]] bool matches(const std::uint8_t    l4_proto, const L7Proto l7_proto) const override;
@@ -17,6 +18,7 @@ public:
     {
         return std::string_view{"http_host_modifier"};
     }
+    void parse_config(const toml::table *table) override;
 };
 
 

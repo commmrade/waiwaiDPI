@@ -5,11 +5,11 @@
 #ifndef WAIWAIDPI_TLS_HANDSHAKE_MODIFIER_HPP
 #define WAIWAIDPI_TLS_HANDSHAKE_MODIFIER_HPP
 #include "modifier.hpp"
-
+#include "split.hpp"
 
 class TlsHandshakeModifier : public IModifier
 {
-    std::size_t split_at_pos_{0};
+    Split split_at_{};
     [[nodiscard]] static std::optional<std::string_view> get_sni(std::span<const char> payload);
 public:
     bool modify(std::vector<Packet> &vec) override;

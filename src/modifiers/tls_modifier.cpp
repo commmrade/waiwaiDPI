@@ -135,6 +135,8 @@ std::optional<std::string_view> TlsHandshakeModifier::get_sni(std::span<const ch
     return std::nullopt;
 }
 
+
+
 bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
 {
     std::vector<char> full_payload;
@@ -153,7 +155,7 @@ bool TlsHandshakeModifier::modify(std::vector<Packet> &vec)
     const auto& sni_str = sni_opt.value();
     const auto sni_str_pos = std::distance(static_cast<const char*>(full_payload.data()), sni_str.data());
 
-    const auto split_at_global_pos = static_cast<std::size_t>(sni_str_pos) + split_at_pos_;
+    const auto split_at_global_pos = static_cast<std::size_t>(sni_str_pos) + calculate_split_offset(split_at_, sni_str.size());
     if (split_at_global_pos >= full_payload.size()) {
         std::print(std::cerr, "Split pos is really wrong, reduce it.");
         return false;
@@ -209,11 +211,19 @@ bool TlsHandshakeModifier::matches(const std::uint8_t l4_proto, const L7Proto l7
 {
     return l4_proto == IPPROTO_TCP && l7_proto == L7Proto::TLS_HANDSHAKE;
 }
+
 void TlsHandshakeModifier::parse_config(const toml::table *table)
 {
     const auto split_node = table->get("split_at");
-    if (split_node == nullptr) {
+    if (split_node != nullptr) {
+        if (split_node->is_number()) {
+            split_at_.offset = static_cast<int>(split_node->as_integer()->get());
+        } else {
+            // Supported values: hoststart, hostend, hostmid, numbers (relative from hoststart start)
+            const auto split_str = split_node->as_string()->get();
+            split_at_ = parse_split(split_str);
+        }
+    } else {
         SPDLOG_WARN("'split_at' parameter for {} is not specified, but it defaults to 0", TlsHandshakeModifier::name());
     }
-    split_at_pos_ = static_cast<std::size_t>(split_node->as_integer()->get());
 }
