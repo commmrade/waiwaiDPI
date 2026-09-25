@@ -7,8 +7,10 @@
 #include "splitter.hpp"
 
 #include "algorithms/split.hpp"
-
+#include "../checksum.hpp"
 #include <arpa/inet.h>
+#include <filesystem>
+#include <fstream>
 
 bool Splitter::check_ip(const std::vector<Packet> &packets) const
 {
@@ -28,6 +30,20 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
         return false;
     }
 
+    if (fake_blob_.has_value()) {
+        const auto front_view = parse_packet_view(vec.front());
+
+        Packet new_packet = create_packet_from(front_view, fake_blob_.value());
+        new_packet.orig_packet = false;
+        new_packet.action.action = PacketAction::Action::SEND;
+        new_packet.action.packet_id = 0;
+
+        auto* tcp = static_cast<tcphdr*>(new_packet.transport_hdr());
+        tcp->check = calc_tcp_checksum(new_packet);
+
+        vec.insert(vec.begin(), std::move(new_packet));
+    }
+
     // Go through each split and split at that position
     bool failed = false;
     if (!splits_.empty()) {
@@ -38,6 +54,8 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
         }
 
         for (const auto& split_pos : splits_) {
+            // TODO: use span instead of vec ref, so I can "subspan" in case I need to avoid
+            // manipulating a specific packet
             if (!split::split(vec, split::SplitConfig{split_pos, allowed_hosts_}, conn)) {
                 SPDLOG_WARN("Wasn't able to split packet at {}:{}", split_pos.arg, split_pos.offset);
                 failed = true;
@@ -118,5 +136,43 @@ void Splitter::parse_config(const toml::table *table)
 
             allowed_ips.insert(addr);
         }
+    }
+
+    const auto* blob_node = table->get("fake_blob");
+    if (blob_node != nullptr) {
+        if (!blob_node->is_string()) {
+            throw std::runtime_error("fake_blob must be a string");
+        }
+
+        const auto blob_path = blob_node->as_string()->get();
+        if (!std::filesystem::exists(blob_path)) {
+            throw std::runtime_error(std::format("Blob at filepath '{}' does not exist", blob_path));
+        }
+
+        auto* fp = std::fopen(blob_path.c_str(), "rb");
+        if (!fp) {
+            throw std::runtime_error(std::format("Could not open file '{}'", blob_path));
+        }
+        int ret = std::fseek(fp, 0U, SEEK_END);
+        if (ret < 0) {
+            throw std::runtime_error(std::strerror(errno));
+        }
+        const auto size = std::ftell(fp);
+        if (size < 0) {
+            throw std::runtime_error(std::strerror(errno));
+        }
+        ret = std::fseek(fp, 0U, SEEK_SET);
+        if (ret < 0) {
+            throw std::runtime_error(std::strerror(errno));
+        }
+        std::vector<char> buf;
+        buf.resize(size);
+        const auto rd = std::fread(buf.data(), 1U, static_cast<std::size_t>(size), fp);
+        if (rd < 0) {
+            throw std::runtime_error(std::strerror(errno));
+        }
+        ret = std::fclose(fp);
+
+        fake_blob_.emplace(std::move(buf));
     }
 }

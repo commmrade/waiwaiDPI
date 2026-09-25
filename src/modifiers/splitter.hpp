@@ -12,6 +12,7 @@
 class Splitter : public IModifier
 {
     std::vector<Split> splits_;
+    std::optional<std::vector<char>> fake_blob_;
     std::optional<std::unordered_set<std::string>> allowed_hosts_; // if std::nullopt, then let everything through
     std::optional<std::unordered_set<std::uint32_t>> allowed_ips_;
 

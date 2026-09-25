@@ -6,14 +6,5 @@ protocol = "tcp"
 name = "tls_handshake_classifier"
 
 [[profile.1.modifiers]]
-name = "tls_handshake_modifier"
-
-[profile.2]
-port = 80
-protocol = "tcp"
-
-[[profile.2.classifiers]]
-name = "http_classifier"
-
-[[profile.2.modifiers]]
-name = "http_host_modifier"
+name = "splitter"
+split_at = ["hostmid"]
