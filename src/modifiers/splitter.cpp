@@ -34,11 +34,11 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
         const auto front_view = parse_packet_view(vec.front());
 
         Packet new_packet = create_packet_from(front_view, fake_blob_.value());
-        new_packet.orig_packet = false;
         new_packet.action.action = PacketAction::Action::SEND;
         new_packet.action.packet_id = 0;
 
         auto* tcp = static_cast<tcphdr*>(new_packet.transport_hdr());
+        tcp->check = 0;
         tcp->check = calc_tcp_checksum(new_packet);
 
         vec.insert(vec.begin(), std::move(new_packet));
