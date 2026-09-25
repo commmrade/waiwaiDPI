@@ -50,6 +50,13 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
             }
         }
 
+        if (seq_offset_.has_value()) {
+            for (auto& packet : packets) {
+                auto* tcp = static_cast<tcphdr*>(packet.transport_hdr());
+                tcp->seq = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + seq_offset_.value()));
+            }
+        }
+
         if (badcksum_) {
             for (auto& packet : packets) {
                 auto* tcp = static_cast<tcphdr*>(packet.transport_hdr());
@@ -67,17 +74,19 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
         new_packet.action.action = PacketAction::Action::SEND;
         new_packet.action.packet_id = 0;
 
-        {
-            auto* tcp = static_cast<tcphdr*>(new_packet.transport_hdr());
-            tcp->check = 0;
-            tcp->check = calc_tcp_checksum(new_packet);
-        }
-
         std::vector<Packet> blob_packets;
         blob_packets.push_back(std::move(new_packet));
 
         if (!process(blob_packets)) {
             failed = true;
+        }
+
+        if (!badcksum_) {
+            for (auto& packet : blob_packets) {
+                auto* tcp = static_cast<tcphdr*>(packet.transport_hdr());
+                tcp->check = 0;
+                tcp->check = calc_tcp_checksum(packet);
+            }
         }
 
         vec.insert(vec.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
@@ -208,5 +217,14 @@ void Splitter::parse_config(const toml::table *table)
 
         srand(time(nullptr));
         badcksum_ = cksum_node->as_boolean()->get();
+    }
+
+    const auto seq_node = table->get("seq_off");
+    if (seq_node != nullptr) {
+        if (!seq_node->is_number()) {
+            throw std::runtime_error("seq_off must be a number");
+        }
+
+        seq_offset_.emplace(seq_node->as_integer()->get());
     }
 }
