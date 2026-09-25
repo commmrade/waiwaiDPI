@@ -15,6 +15,7 @@ class Splitter : public IModifier
     std::optional<std::vector<char>> fake_blob_;
     std::optional<std::unordered_set<std::string>> allowed_hosts_; // if std::nullopt, then let everything through
     std::optional<std::unordered_set<std::uint32_t>> allowed_ips_;
+    bool badcksum_{false};
 
     bool check_ip(const std::vector<Packet>& packets) const;
 public:

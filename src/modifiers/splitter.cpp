@@ -30,6 +30,36 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
         return false;
     }
 
+    bool failed = false;
+
+    auto process = [this, &conn](std::vector<Packet>& packets) -> bool {
+        bool failed = false;
+
+        if (!splits_.empty()) {
+            std::vector<char> full_payload;
+            for (const auto& pkt : packets) {
+                const auto payload = pkt.payload();
+                full_payload.insert(full_payload.end(), payload.begin(), payload.end());
+            }
+
+            for (const auto& split_pos : splits_) {
+                if (!split::split(packets, split::SplitConfig{.pos=split_pos, .hosts=allowed_hosts_}, conn)) {
+                    SPDLOG_WARN("Wasn't able to split packet at {}:{}", split_pos.arg, split_pos.offset);
+                    failed = true;
+                }
+            }
+        }
+
+        if (badcksum_) {
+            for (auto& packet : packets) {
+                auto* tcp = static_cast<tcphdr*>(packet.transport_hdr());
+                tcp->check = htonl(rand() % 256);
+            }
+        }
+
+        return !failed;
+    };
+
     if (fake_blob_.has_value()) {
         const auto front_view = parse_packet_view(vec.front());
 
@@ -37,29 +67,23 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
         new_packet.action.action = PacketAction::Action::SEND;
         new_packet.action.packet_id = 0;
 
-        auto* tcp = static_cast<tcphdr*>(new_packet.transport_hdr());
-        tcp->check = 0;
-        tcp->check = calc_tcp_checksum(new_packet);
-
-        vec.insert(vec.begin(), std::move(new_packet));
-    }
-
-    // Go through each split and split at that position
-    bool failed = false;
-    if (!splits_.empty()) {
-        std::vector<char> full_payload;
-        for (const auto& pkt : vec) {
-            const auto payload = pkt.payload();
-            full_payload.insert(full_payload.end(), payload.begin(), payload.end());
+        {
+            auto* tcp = static_cast<tcphdr*>(new_packet.transport_hdr());
+            tcp->check = 0;
+            tcp->check = calc_tcp_checksum(new_packet);
         }
 
-        for (const auto& split_pos : splits_) {
-            // TODO: use span instead of vec ref, so I can "subspan" in case I need to avoid
-            // manipulating a specific packet
-            if (!split::split(vec, split::SplitConfig{split_pos, allowed_hosts_}, conn)) {
-                SPDLOG_WARN("Wasn't able to split packet at {}:{}", split_pos.arg, split_pos.offset);
-                failed = true;
-            }
+        std::vector<Packet> blob_packets;
+        blob_packets.push_back(std::move(new_packet));
+
+        if (!process(blob_packets)) {
+            failed = true;
+        }
+
+        vec.insert(vec.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
+    } else {
+        if (!process(vec)) {
+            failed = true;
         }
     }
 
@@ -174,5 +198,15 @@ void Splitter::parse_config(const toml::table *table)
         ret = std::fclose(fp);
 
         fake_blob_.emplace(std::move(buf));
+    }
+
+    const auto* cksum_node = table->get("badcksum");
+    if (cksum_node != nullptr) {
+        if (!cksum_node->is_boolean()) {
+            throw std::runtime_error("badcksum must be a bool");
+        }
+
+        srand(time(nullptr));
+        badcksum_ = cksum_node->as_boolean()->get();
     }
 }
