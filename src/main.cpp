@@ -42,16 +42,6 @@ struct Context
     std::uint32_t queue_number;
 };
 
-
-
-void print_as_array(std::string_view name, std::span<const char> data) {
-    std::print("unsigned char {}[] = {{", name);
-    for (size_t i = 0; i < data.size(); ++i) {
-        std::print("{}0x{:02x}", i ? ", " : "", data[i]);
-    }
-    std::println("}};");
-}
-
 int cb_loop(const struct nlmsghdr *nlh, void *data)
 {
     auto *ctx = static_cast<Context *>(data);

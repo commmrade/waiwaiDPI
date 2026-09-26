@@ -24,6 +24,56 @@ bool Splitter::check_ip(const std::vector<Packet> &packets) const
 
     return true;
 }
+
+static bool timestamp_val_offset(Packet& packet, const int offset)
+{
+    auto* tcp = static_cast<tcphdr*>(packet.transport_hdr());
+    std::span<char> tcp_bytes{static_cast<char*>(packet.transport_hdr()), static_cast<std::size_t>(tcp->doff * 4)};
+    if (tcp_bytes.size() <= sizeof(tcphdr)) {
+        return false; // no TCP options
+    }
+
+    constexpr static std::uint8_t TS_OPT_KIND = 8;
+    constexpr static std::uint8_t TS_OPT_SIZE = 10;
+
+    tcp_bytes = tcp_bytes.subspan(sizeof(tcphdr));
+    while (!tcp_bytes.empty()) {
+        if (tcp_bytes.size() < 2) {
+            return false; // not enough bytes to get KIND,LENGTH
+        }
+
+        const std::uint8_t kind = tcp_bytes[0];
+        if (kind == 1) { // no-op
+            tcp_bytes = tcp_bytes.subspan(1);
+            continue;
+        }
+
+        const std::uint8_t size = tcp_bytes[1];
+        if (kind != TS_OPT_KIND) {
+            if (tcp_bytes.size() < size) {
+                return false;
+            }
+
+            tcp_bytes = tcp_bytes.subspan(size); // size includes kind,length + payload
+            continue;
+        }
+
+        assert(size == TS_OPT_SIZE);
+
+        // TODO: i think it breaks strict aliasing, may wanna use launder or something????
+        std::uint32_t* tv = reinterpret_cast<std::uint32_t*>(tcp_bytes.data() + 2);
+        std::uint32_t* tr = reinterpret_cast<std::uint32_t*>(tcp_bytes.data() + 2 + sizeof(*tv));
+
+        *tv = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tv)) + offset));
+        *tr = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tr)) + offset));
+
+        SPDLOG_WARN("UPDATED TIMESTAMP");
+        break;
+    }
+
+    return true;
+}
+
 bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
 {
     if (!check_ip(vec)) {
@@ -45,6 +95,15 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
             for (const auto& split_pos : splits_) {
                 if (!split::split(packets, split::SplitConfig{.pos=split_pos, .hosts=allowed_hosts_}, conn)) {
                     SPDLOG_WARN("Wasn't able to split packet at {}:{}", split_pos.arg, split_pos.offset);
+                    failed = true;
+                }
+            }
+        }
+
+        if (ts_offset_.has_value()) {
+            for (auto& packet : packets) {
+                if (!timestamp_val_offset(packet, ts_offset_.value())) {
+                    SPDLOG_WARN("Failed to offset timestamp");
                     failed = true;
                 }
             }
@@ -87,6 +146,10 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
                 tcp->check = 0;
                 tcp->check = calc_tcp_checksum(packet);
             }
+        }
+
+        for (auto& packet : blob_packets) {
+            packet.is_fake_blob = true;
         }
 
         vec.insert(vec.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
@@ -226,5 +289,14 @@ void Splitter::parse_config(const toml::table *table)
         }
 
         seq_offset_.emplace(seq_node->as_integer()->get());
+    }
+
+    const auto* ts_node = table->get("ts_off");
+    if (ts_node != nullptr) {
+        if (!ts_node->is_number()) {
+            throw std::runtime_error("ts_off must be a number");
+        }
+
+        ts_offset_.emplace(ts_node->as_integer()->get());
     }
 }
