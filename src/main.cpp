@@ -293,7 +293,7 @@ int main(int argc, char *argv[])
         const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - last_check_time);
         if (dur.count() >= CHECK_DEAD_CONNECTIONS_INTERVAL_SECS) {
             SPDLOG_DEBUG("Deleting dead connections");
-            ctx.tracker->clear_dead_connections();
+            ctx.tracker->clear_dead_connections(ctx.sock, ctx.queue_number);
             last_check_time = now;
         }
 
