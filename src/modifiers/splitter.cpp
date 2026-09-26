@@ -104,6 +104,16 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
             }
         }
 
+        if (ipv4_ttl.has_value()) {
+            for (auto& packet : packets) {
+                if (!handle_fake && packet.is_fake_blob) {
+                    continue;
+                }
+
+                packet.network_hdr()->ttl = ipv4_ttl.value();
+            }
+        }
+
         if (ts_offset_.has_value()) {
             for (auto& packet : packets) {
                 if (!handle_fake && packet.is_fake_blob) {
@@ -311,5 +321,14 @@ void Splitter::parse_config(const toml::table *table)
         }
 
         ts_offset_.emplace(ts_node->as_integer()->get());
+    }
+
+    const auto* ipv4_ttl_node = table->get("ipv4_ttl");
+    if (ipv4_ttl_node != nullptr) {
+        if (!ipv4_ttl_node->is_number()) {
+            throw std::runtime_error("ipv4_ttl must be a number");
+        }
+
+        ipv4_ttl.emplace(ipv4_ttl_node->as_integer()->get());
     }
 }

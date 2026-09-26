@@ -18,6 +18,7 @@ class Splitter : public IModifier
     bool badcksum_{false};
     std::optional<int> seq_offset_;
     std::optional<int> ts_offset_;
+    std::optional<std::uint8_t> ipv4_ttl;
 
     bool check_ip(const std::vector<Packet>& packets) const;
 public:
