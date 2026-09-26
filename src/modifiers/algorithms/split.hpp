@@ -17,6 +17,7 @@ namespace split {
     {
         const Split& pos;
         const std::optional<std::unordered_set<std::string>>& hosts;
+        bool handle_fake;
     };
 
     bool split(std::vector<Packet>& packets, const SplitConfig& cfg, const Connection& conn);

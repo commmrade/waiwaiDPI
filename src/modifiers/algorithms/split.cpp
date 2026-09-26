@@ -30,12 +30,16 @@ static std::size_t do_operation(const std::size_t start, const Split::Operation 
 };
 
 static std::pair<std::vector<Packet>::iterator, std::size_t> find_packet_by_offset(std::vector<Packet> &packets,
-    const std::size_t split_pos)
+    const std::size_t split_pos, bool handle_fake)
 {
     auto iter = packets.begin();
     std::size_t offset = 0;
     std::size_t split_pos_relative_to_packet = 0;
     for (; iter != packets.end(); ++iter) {
+        if (!handle_fake && iter->is_fake_blob) {
+            continue;
+        }
+
         offset += iter->payload().size();
         if (split_pos < offset) {
             split_pos_relative_to_packet = split_pos - (offset - iter->payload().size());
@@ -223,6 +227,10 @@ bool split::split(std::vector<Packet>& packets, const SplitConfig& cfg, const Co
 {
     std::vector<char> full_payload;
     for (const auto &pkt : packets) {
+        if (!cfg.handle_fake && pkt.is_fake_blob) {
+            continue;
+        }
+
         const auto payload = pkt.payload();
         full_payload.insert(full_payload.end(), payload.begin(), payload.end());
     }
@@ -289,7 +297,7 @@ bool split::split_http(std::vector<Packet>& packets, const std::vector<char>& fu
         split_pos = offset;
     }
 
-    auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos);
+    auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos, cfg.handle_fake);
     // split iter packet at split_pos_relative_to_packet
     if (split_pos_relative_to_packet == 0) {
         // already split naturally
@@ -335,7 +343,7 @@ bool split::split_tls(std::vector<Packet>& packets, const std::vector<char>& ful
         split_pos = offset;
     }
 
-    auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos);
+    auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos, cfg.handle_fake);
     // split iter packet at split_pos_relative_to_packet
     if (split_pos_relative_to_packet == 0) {
         // already split naturally
@@ -350,7 +358,7 @@ bool split::split_other(std::vector<Packet>& packets, const std::vector<char>& f
 {
     const auto split_pos = cfg.pos.offset;
 
-    auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos);
+    auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos, cfg.handle_fake);
     // split iter packet at split_pos_relative_to_packet
     if (split_pos_relative_to_packet == 0) {
         // already split naturally

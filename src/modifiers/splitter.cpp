@@ -82,18 +82,22 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
 
     bool failed = false;
 
-    auto process = [this, &conn](std::vector<Packet>& packets) -> bool {
+    auto process = [this, &conn](std::vector<Packet>& packets, bool handle_fake) -> bool {
         bool failed = false;
 
         if (!splits_.empty()) {
             std::vector<char> full_payload;
             for (const auto& pkt : packets) {
+                if (!handle_fake && pkt.is_fake_blob) {
+                    continue;
+                }
+
                 const auto payload = pkt.payload();
                 full_payload.insert(full_payload.end(), payload.begin(), payload.end());
             }
 
             for (const auto& split_pos : splits_) {
-                if (!split::split(packets, split::SplitConfig{.pos=split_pos, .hosts=allowed_hosts_}, conn)) {
+                if (!split::split(packets, split::SplitConfig{.pos=split_pos, .hosts=allowed_hosts_, .handle_fake=handle_fake}, full_payload, conn)) {
                     SPDLOG_WARN("Wasn't able to split packet at {}:{}", split_pos.arg, split_pos.offset);
                     failed = true;
                 }
@@ -102,6 +106,9 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
 
         if (ts_offset_.has_value()) {
             for (auto& packet : packets) {
+                if (!handle_fake && packet.is_fake_blob) {
+                    continue;
+                }
                 if (!timestamp_val_offset(packet, ts_offset_.value())) {
                     SPDLOG_WARN("Failed to offset timestamp");
                     failed = true;
@@ -111,6 +118,9 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
 
         if (seq_offset_.has_value()) {
             for (auto& packet : packets) {
+                if (!handle_fake && packet.is_fake_blob) {
+                    continue;
+                }
                 auto* tcp = static_cast<tcphdr*>(packet.transport_hdr());
                 tcp->seq = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + seq_offset_.value()));
             }
@@ -118,6 +128,9 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
 
         if (badcksum_) {
             for (auto& packet : packets) {
+                if (!handle_fake && packet.is_fake_blob) {
+                    continue;
+                }
                 auto* tcp = static_cast<tcphdr*>(packet.transport_hdr());
                 tcp->check = htonl(rand() % 256);
             }
@@ -136,7 +149,7 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
         std::vector<Packet> blob_packets;
         blob_packets.push_back(std::move(new_packet));
 
-        if (!process(blob_packets)) {
+        if (!process(blob_packets, true)) {
             failed = true;
         }
 
@@ -154,7 +167,7 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection& conn)
 
         vec.insert(vec.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
     } else {
-        if (!process(vec)) {
+        if (!process(vec, false)) {
             failed = true;
         }
     }
