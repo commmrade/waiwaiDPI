@@ -2,6 +2,8 @@
 // Created by klewy on 8/10/26.
 //
 
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include <spdlog/spdlog.h>
 #include "conn_tracker.hpp"
 #include "consts.hpp"
 #include "nfq.hpp"
@@ -168,8 +170,10 @@ void ConnTracker::clear_dead_connections(mnl_socket* sock, const std::uint32_t q
             // assert(iter->second.get_reasm_frags().empty()); // There can't be any packets here, because they are all processed
             if (!iter->second.get_reasm_frags().empty()) {
                 for (const auto& pkt : iter->second.get_reasm_frags()) {
-                    int ret = send_verdict(sock, queue_num, ntohl(pkt.action.packet_id), NF_DROP);
-                    assert(ret);
+                    int ret = send_verdict(sock, queue_num, pkt.action.packet_id, NF_DROP);
+                    if (ret < 0) {
+                        SPDLOG_WARN("Unable to drop packet with id: {}", pkt.action.packet_id);
+                    }
                 }
             }
             iter = conns_.erase(iter);
