@@ -64,7 +64,6 @@ static bool timestamp_val_offset(Packet &packet, const int offset)
         *tv = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tv)) + offset));
         *tr = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tr)) + offset));
 
-        SPDLOG_WARN("UPDATED TIMESTAMP");
         break;
     }
 

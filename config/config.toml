@@ -1,10 +1,18 @@
-[profile.1]
+[profile.2]
 port = 443
 protocol = "tcp"
 
-[[profile.1.classifiers]]
+[[profile.2.classifiers]]
 name = "tls_handshake_classifier"
 
-[[profile.1.modifiers]]
+[[profile.2.modifiers]]
 name = "splitter"
-split_at = ["hostmid"]
+split_at = ["2", "hoststart+1"]
+allowed_hosts = ["soundcloud.com", "github.com", "patriotvepen.me", "vk.com", "www.google.com", "linkedin.com"]
+fake_blob = "/home/klewy/Downloads/tls_clienthello_www_google_com.bin"
+ts_off = -10000
+
+[[profile.2.modifiers]]
+name = "splitter"
+split_at = ["2", "hoststart+1"]
+allowed_hosts = ["soundcloud.com", "github.com", "patriotvepen.me", "vk.com", "linkedin.com"]

@@ -54,14 +54,19 @@ add_executable(tests
         ../src/checksum.cpp
         ../src/modifiers/modifier.cpp
         ../src/modifiers/tls_modifier.cpp
+        ../src/modifiers/splitter.cpp
+        ../src/modifiers/algorithms/split.cpp
         tcp_state_tests.cpp
         http_modifier_tests.cpp
         tls_modifier_tests.cpp
+        splitter_tests.cpp
 )
 target_link_libraries(
   tests
   PRIVATE waiwaiDPI::waiwaiDPI_warnings
           waiwaiDPI::waiwaiDPI_options
+          spdlog::spdlog
+          tomlplusplus
           Catch2::Catch2WithMain)
 
 waiwaiDPI_configure_linker(tests)
