@@ -279,8 +279,8 @@ TEST_CASE_METHOD(SplitterTestFixture, "Sequence offset parameter", "[splitter_mo
     REQUIRE(modifier.modify(packets, conn));
     REQUIRE(packets.size() == 2);
 
-    for (const auto& packet : packets) {
-        tcp = static_cast<tcphdr*>(packets.front().transport_hdr());
+    for (auto& packet : packets) {
+        tcp = static_cast<tcphdr*>(packet.transport_hdr());
         REQUIRE(ntohl(tcp->seq) == start_seq);
         start_seq += packet.payload().size();
     }
