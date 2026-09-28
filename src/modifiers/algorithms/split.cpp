@@ -180,7 +180,7 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
     return std::nullopt;
 }
 
-void split_and_insert_packets(std::vector<Packet>::iterator iter,
+static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
     const std::size_t split_pos_relative_to_packet,
     std::vector<Packet> &packets)
 {
@@ -304,7 +304,7 @@ bool split::split_http(std::vector<Packet>& packets, const std::vector<char>& fu
         return true;
     }
 
-    helpers::split_and_insert_packets(iter, split_pos_relative_to_packet, packets);
+    helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
     return true;
 }
 
@@ -350,7 +350,7 @@ bool split::split_tls(std::vector<Packet>& packets, const std::vector<char>& ful
         return true;
     }
 
-    helpers::split_and_insert_packets(iter, split_pos_relative_to_packet, packets);
+    helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
     return true;
 }
 
@@ -365,6 +365,6 @@ bool split::split_other(std::vector<Packet>& packets, const std::vector<char>& f
         return true;
     }
 
-    helpers::split_and_insert_packets(iter, split_pos_relative_to_packet, packets);
+    helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
     return true;
 }
