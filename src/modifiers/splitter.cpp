@@ -29,7 +29,7 @@ static bool timestamp_val_offset(Packet &packet, const int offset)
     auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
     std::span<char> tcp_bytes{ static_cast<char *>(packet.transport_hdr()), static_cast<std::size_t>(tcp->doff * 4) };
     if (tcp_bytes.size() <= sizeof(tcphdr)) {
-        return false;// no TCP options
+        return false; // no TCP options
     }
 
     constexpr static std::uint8_t TS_OPT_KIND = 8;
@@ -51,15 +51,17 @@ static bool timestamp_val_offset(Packet &packet, const int offset)
         if (kind != TS_OPT_KIND) {
             if (tcp_bytes.size() < size) { return false; }
 
+            assert(size > 0);
             tcp_bytes = tcp_bytes.subspan(size);// size includes kind,length + payload
             continue;
         }
 
-        assert(size == TS_OPT_SIZE);
+        if (size < TS_OPT_SIZE || size > TS_OPT_SIZE) {
+            return false;
+        }
 
-        // TODO: i think it breaks strict aliasing, may wanna use launder or something????
-        std::uint32_t *tv = reinterpret_cast<std::uint32_t *>(tcp_bytes.data() + 2);
-        std::uint32_t *tr = reinterpret_cast<std::uint32_t *>(tcp_bytes.data() + 2 + sizeof(*tv));
+        auto* tv = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2));
+        auto* tr = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2 + sizeof(*tv)));
 
         *tv = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tv)) + offset));
         *tr = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tr)) + offset));
