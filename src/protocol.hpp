@@ -12,6 +12,7 @@ enum class L7Proto
     // REASSEMBLING, // In this case payload isn't assembled and packets should be held, packets can't be modified
     HTTP,
     TLS_HANDSHAKE,
+    QUIC_INITIAL
 };
 
 #endif// WAIWAIDPI_PROTOCOL_HPP

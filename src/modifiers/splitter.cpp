@@ -105,25 +105,37 @@ bool Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
     }
 
     if (ts_offset_.has_value()) {
-        for (auto &packet : filtered_packets) {
-            if (!timestamp_val_offset(packet, ts_offset_.value())) {
-                SPDLOG_WARN("Failed to offset timestamp");
-                failed = true;
+        if (conn.get_l4_proto() == IPPROTO_TCP) {
+            for (auto &packet : filtered_packets) {
+                if (!timestamp_val_offset(packet, ts_offset_.value())) {
+                    SPDLOG_WARN("Failed to offset timestamp");
+                    failed = true;
+                }
             }
+        } else {
+            SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
         }
     }
 
     if (seq_offset_.has_value()) {
-        for (auto &packet : filtered_packets) {
-            auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-            tcp->seq = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + seq_offset_.value()));
+        if (conn.get_l4_proto() == IPPROTO_TCP) {
+            for (auto &packet : filtered_packets) {
+                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+                tcp->seq = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + seq_offset_.value()));
+            }
+        } else {
+            SPDLOG_WARN("Seq. Offset is defined but the protocol is not TCP");
         }
     }
 
     if (badcksum_) {
-        for (auto &packet : filtered_packets) {
-            auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-            tcp->check = htonl(rand() % 256);
+        if (conn.get_l4_proto() == IPPROTO_TCP) {
+            for (auto &packet : filtered_packets) {
+                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+                tcp->check = htonl(rand() % 256);
+            }
+        } else {
+            SPDLOG_ERROR("Bad Checksum for protocols other than TCP hasn't been implemented yet");
         }
     }
 

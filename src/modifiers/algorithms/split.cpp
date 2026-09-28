@@ -195,6 +195,7 @@ static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
 
     // Second packet
     Packet second = create_packet_from(pkt_view, part2);
+    second.is_fake_blob = pkt.is_fake_blob;
     second.action.action = PacketAction::Action::SEND;
     second.action.packet_id = 0;
 
@@ -365,6 +366,10 @@ bool split::split_other(std::vector<Packet>& packets, const std::vector<char>& f
         return true;
     }
 
-    helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
+    if (packets.front().network_hdr()->protocol == IPPROTO_TCP) {
+        helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
+    } else {
+        throw std::runtime_error("Other protocols aren't supported yet");
+    }
     return true;
 }
