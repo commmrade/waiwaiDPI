@@ -16,7 +16,7 @@ class ConnTracker;
 struct PacketView;
 enum class ParseResult : std::uint8_t
 {
-    // ERROR,
+    ERROR,
     REASSEMBLING,
     SUCCESS_REASSEMBLED,
     SUCCESS

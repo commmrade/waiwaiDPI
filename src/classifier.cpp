@@ -45,7 +45,7 @@ std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
         }
     }
 
-    return { L7Proto::UNKNOWN };
+    return std::unexpected{ParseResult::ERROR};
 }
 
 void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
