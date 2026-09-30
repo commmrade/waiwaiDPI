@@ -6,7 +6,6 @@
 #include "consts.hpp"
 #include "iptables.hpp"
 
-#include "modifiers/dumbass_modifier.hpp"
 #include "modifiers/http_host_modifier.hpp"
 #include "modifiers/tls_modifier.hpp"
 #include "nfq.hpp"
@@ -42,16 +41,6 @@ struct Context
     int raw_sock;
     std::uint32_t queue_number;
 };
-
-
-
-void print_as_array(std::string_view name, std::span<const char> data) {
-    std::print("unsigned char {}[] = {{", name);
-    for (size_t i = 0; i < data.size(); ++i) {
-        std::print("{}0x{:02x}", i ? ", " : "", data[i]);
-    }
-    std::println("}};");
-}
 
 int cb_loop(const struct nlmsghdr *nlh, void *data)
 {
@@ -304,7 +293,7 @@ int main(int argc, char *argv[])
         const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - last_check_time);
         if (dur.count() >= CHECK_DEAD_CONNECTIONS_INTERVAL_SECS) {
             SPDLOG_DEBUG("Deleting dead connections");
-            ctx.tracker->clear_dead_connections();
+            ctx.tracker->clear_dead_connections(ctx.sock, ctx.queue_number);
             last_check_time = now;
         }
 

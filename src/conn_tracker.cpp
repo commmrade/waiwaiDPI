@@ -2,9 +2,14 @@
 // Created by klewy on 8/10/26.
 //
 
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include <spdlog/spdlog.h>
 #include "conn_tracker.hpp"
 #include "consts.hpp"
+#include "nfq.hpp"
+
 #include <cassert>
+#include <linux/netfilter.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 
@@ -142,7 +147,7 @@ Connection &ConnTracker::get_conn(const std::uint32_t saddr,
     return conns_.at({ saddr, source, daddr, dest, proto });
 }
 
-void ConnTracker::clear_dead_connections()
+void ConnTracker::clear_dead_connections(mnl_socket* sock, const std::uint32_t queue_num)
 {
     auto calculate_timeout = [](const Connection& conn) -> int {
         int timeout_value = 0;
@@ -162,7 +167,15 @@ void ConnTracker::clear_dead_connections()
 
         auto timeout = calculate_timeout(iter->second);
         if (dur.count() >= timeout) {
-            assert(iter->second.get_reasm_frags().empty()); // There can't be any packets here, because they are all processed
+            // assert(iter->second.get_reasm_frags().empty()); // There can't be any packets here, because they are all processed
+            if (!iter->second.get_reasm_frags().empty()) {
+                for (const auto& pkt : iter->second.get_reasm_frags()) {
+                    int ret = send_verdict(sock, queue_num, pkt.action.packet_id, NF_DROP);
+                    if (ret < 0) {
+                        SPDLOG_WARN("Unable to drop packet with id: {}", pkt.action.packet_id);
+                    }
+                }
+            }
             iter = conns_.erase(iter);
         } else {
             ++iter;

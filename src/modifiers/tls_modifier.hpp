@@ -12,7 +12,7 @@ class TlsHandshakeModifier : public IModifier
     Split split_at_{};
     [[nodiscard]] static std::optional<std::string_view> get_sni(std::span<const char> payload);
 public:
-    bool modify(std::vector<Packet> &vec) override;
+    bool modify(std::vector<Packet> &vec, const Connection& conn) override;
     bool matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const override;
     [[nodiscard]] static constexpr std::string_view name()
     {

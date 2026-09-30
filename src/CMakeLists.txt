@@ -21,8 +21,6 @@ add_executable(main main.cpp
         modifiers/modifier.hpp
         modifiers/http_host_modifier.cpp
         modifiers/http_host_modifier.hpp
-        modifiers/dumbass_modifier.cpp
-        modifiers/dumbass_modifier.hpp
         checksum.cpp
         checksum.hpp
         modifiers/modifier.cpp
@@ -34,6 +32,10 @@ add_executable(main main.cpp
         iptables.cpp
         iptables.hpp
         modifiers/split.hpp
+        modifiers/splitter.cpp
+        modifiers/splitter.hpp
+        modifiers/algorithms/split.cpp
+        modifiers/algorithms/split.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})

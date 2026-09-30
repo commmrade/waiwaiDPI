@@ -14,6 +14,8 @@
 #include <unordered_map>
 #include <vector>
 
+
+struct mnl_socket;
 class Connection
 {
 public:
@@ -122,7 +124,7 @@ private:
 
 public:
     void track(const PacketView &packet);
-    void clear_dead_connections();
+    void clear_dead_connections(mnl_socket* sock, const std::uint32_t queue_num);
 
     Connection &get_conn(const std::uint32_t saddr,
         const std::uint16_t source,
