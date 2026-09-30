@@ -158,9 +158,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
                 }
             }
-        } else if (res == ParseResult::ERROR) {
-            ret = send_verdict(ctx->sock, ctx->queue_number, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
-            assert(ret);
         }
     } else {
         SPDLOG_DEBUG("Packet {} is for a connection that is done", packet.packet_id);

@@ -9,7 +9,7 @@
 #include "../conn_tracker.hpp"
 #include "../consts.hpp"
 
-ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
+std::expected<ParseResult, std::string> HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
 {
     if (conn.get_reasm_frags().empty()) { // if first fragment
         conn.set_reasm_total_size(HTTP_PARSE_LIMIT);
@@ -25,7 +25,7 @@ ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
 
     if (!conn.get_reasm_frags().empty()) { // if not the first fragment
         if (conn.get_reasm_pos() >= conn.get_reasm_total_size()) {
-            return ParseResult::ERROR;
+            return std::unexpected{"Reassmebly position is >= total size"};
         }
 
         std::string full_http;
@@ -37,14 +37,14 @@ ParseResult HttpClassifier::buffer_pkt(Connection &conn, const PacketView &pkt)
         }
 
         if (full_http.contains("\r\n\r\n")) {
-            return ParseResult::SUCCESS_REASSEMBLED;
+            return {ParseResult::SUCCESS_REASSEMBLED};
         }
     }
 
-    return ParseResult::REASSEMBLING;
+    return {ParseResult::REASSEMBLING};
 }
 
-ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker& tracker)
+std::expected<ParseResult, std::string> HttpClassifier::classify(const PacketView &pkt, ConnTracker& tracker)
 {
     auto &conn =
         tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port(), pkt.network_hdr->protocol);
@@ -56,14 +56,16 @@ ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker& tracker
     std::string_view payload_str{ pkt.payload };
     // First, try to find \r\n (the status line)
     const auto crln_pos = payload_str.find("\r\n");
-    if (crln_pos == std::string_view::npos) { return ParseResult::ERROR; }
+    if (crln_pos == std::string_view::npos) {
+        return std::unexpected{"HTTP request is malformed: was unable to find \r\n"};
+    }
 
     payload_str = payload_str.substr(0, crln_pos);
 
     // Now, try to search for "HTTP/"
     const auto http_pos = payload_str.find("HTTP/");
     if (http_pos == std::string_view::npos) {
-        return ParseResult::ERROR;// HTTP string not found => not HTTP
+        return std::unexpected{"HTTP request is malformed: was unable to find HTTP in status line"};
     }
 
     std::string_view const full_req{ pkt.payload };
@@ -74,5 +76,5 @@ ParseResult HttpClassifier::classify(const PacketView &pkt, ConnTracker& tracker
 
     conn.set_payload_proto(L7Proto::HTTP);
 
-    return ParseResult::SUCCESS;
+    return {ParseResult::SUCCESS};
 }

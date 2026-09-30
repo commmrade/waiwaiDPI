@@ -7,15 +7,16 @@
 #include <cstdint>
 #include "../protocol.hpp"
 
-#include <string_view>
+#include <expected>
 #include <optional>
+#include <string_view>
 #include <toml++/impl/table.hpp>
 
 class ConnTracker;
 struct PacketView;
 enum class ParseResult : std::uint8_t
 {
-    ERROR,
+    // ERROR,
     REASSEMBLING,
     SUCCESS_REASSEMBLED,
     SUCCESS
@@ -25,7 +26,7 @@ class PayloadClassifier //NOLINT
 {
 public:
     virtual ~PayloadClassifier() = default;
-    virtual ParseResult classify(const PacketView& pkt, ConnTracker& tracker) = 0;
+    virtual std::expected<ParseResult, std::string> classify(const PacketView& pkt, ConnTracker& tracker) = 0;
 
     virtual void parse_config([[maybe_unused]] const toml::table* table) {}
     [[nodiscard]] virtual constexpr L7Proto protocol() const = 0;

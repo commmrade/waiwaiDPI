@@ -1,10 +1,13 @@
 //
 // Created by klewy on 8/10/26.
 //
-#include "classifier.hpp"
 
+
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include "classifier.hpp"
 #include "conn_tracker.hpp"
 #include "consts.hpp"
+#include <spdlog/spdlog.h>
 
 #include <cassert>
 #include <cstdint>
@@ -18,30 +21,30 @@
 
 std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
 {
-    bool got_error = false;
     for (const auto &classifier : classifiers_) {
-        switch (classifier->classify(pkt, tracker_.get())) {
-        case ParseResult::SUCCESS: {
-            return { classifier->protocol() };
-        }
-        case ParseResult::SUCCESS_REASSEMBLED: {
-            pkt.is_payload_reasm = true;
-            return { classifier->protocol() };
-        }
-        case ParseResult::REASSEMBLING: {
-            pkt.is_payload_reasm = true;
-            return std::unexpected{ ParseResult::REASSEMBLING };
-        }
-        case ParseResult::ERROR: {
-            got_error = true;
-            break;
-        }
-        default: {
-        }
+        auto res = classifier->classify(pkt, tracker_.get());
+        if (res) {
+            switch (res.value()) {
+            case ParseResult::SUCCESS: {
+                return { classifier->protocol() };
+            }
+            case ParseResult::SUCCESS_REASSEMBLED: {
+                pkt.is_payload_reasm = true;
+                return { classifier->protocol() };
+            }
+            case ParseResult::REASSEMBLING: {
+                pkt.is_payload_reasm = true;
+                return std::unexpected{ ParseResult::REASSEMBLING };
+            }
+            default: {
+                break;
+            }
+            }
+        } else {
+            SPDLOG_WARN("Was not able to classify a packet: {}", res.error());
         }
     }
 
-    if (got_error) { return std::unexpected{ ParseResult::ERROR }; }
     return { L7Proto::UNKNOWN };
 }
 

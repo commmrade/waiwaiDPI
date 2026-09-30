@@ -46,7 +46,6 @@ static std::pair<std::vector<Packet>::iterator, std::size_t> find_packet_by_offs
             break;
         }
     }
-    assert(iter != packets.end());
 
     return { iter, split_pos_relative_to_packet };
 }
@@ -359,7 +358,10 @@ std::expected<bool, std::string> split::split_other(std::vector<Packet>& packets
     const auto split_pos = cfg.pos.offset;
 
     auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos, cfg.handle_fake);
-    // split iter packet at split_pos_relative_to_packet
+    if (iter == packets.end()) {
+        return {false};
+    }
+
     if (split_pos_relative_to_packet == 0) {
         // already split naturally
         return {true};

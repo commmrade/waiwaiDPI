@@ -8,13 +8,13 @@
 #include <print>
 #include <cstring>
 
-ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketView &pkt, std::optional<std::size_t> tls_len)
+std::expected<ParseResult, std::string> TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketView &pkt, std::optional<std::size_t> tls_len)
 {
     constexpr auto TLS_RECORD_MAX_SIZE = 1 << 14;
     if (conn.get_reasm_frags().empty() && tls_len.has_value()) {
         if (tls_len.value() > TLS_RECORD_MAX_SIZE) {
             conn.set_done(true);
-            return ParseResult::ERROR;
+            return std::unexpected{"Buffered bytes overflow"};
         }
 
         conn.set_reasm_total_size(tls_len.value());
@@ -31,26 +31,26 @@ ParseResult TlsHandshakeClassifier::buffer_pkt(Connection &conn, const PacketVie
     if (!conn.get_reasm_frags().empty()) {
         if (conn.get_reasm_pos() >= conn.get_reasm_total_size()) {
             conn.set_done(true);
-            return ParseResult::SUCCESS_REASSEMBLED;// we got the whole TLS client hello, hooray
+            return {ParseResult::SUCCESS_REASSEMBLED};// we got the whole TLS client hello, hooray
         }
     }
 
-    return ParseResult::REASSEMBLING;
+    return {ParseResult::REASSEMBLING};
 }
 
-ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker& tracker)
+std::expected<ParseResult, std::string> TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker& tracker)
 {
     auto &conn =
        tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port(), pkt.network_hdr->protocol);
     if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE
         && conn.get_reasm_pos() > 0 && pkt.get_seq() == conn.get_reasm_expected_seq()) {
         return buffer_pkt(conn, pkt, std::nullopt);
-    }
+        }
 
     constexpr auto TLS_HDR_LEN = 5;
     if (pkt.payload.size() < TLS_HDR_LEN) {
         // Don't do conn.set_done(true) here, because it can get here when the host sends a SYN[/ACK]packet
-        return ParseResult::ERROR;
+        return std::unexpected{"Not TLS"};
     }
 
     constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
@@ -61,7 +61,7 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker&
         (pkt.payload[2] != 0x01 && pkt.payload[2] != 0x03))
     {
         conn.set_done(true);
-        return ParseResult::ERROR; // not a TLS handshake
+        return std::unexpected{"Not TLS"};
     }
 
     std::uint16_t tls_len{};
@@ -75,5 +75,5 @@ ParseResult TlsHandshakeClassifier::classify(const PacketView &pkt, ConnTracker&
     conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
 
     conn.set_done(true);
-    return ParseResult::SUCCESS;
+    return {ParseResult::SUCCESS};
 }
