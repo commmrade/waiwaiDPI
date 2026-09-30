@@ -70,10 +70,8 @@ static bool timestamp_val_offset(Packet &packet, const int offset)
     return true;
 }
 
-bool Splitter::process(std::vector<Packet> &packets, const bool handle_fake, const Connection &conn)
+void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, const Connection &conn)
 {
-    bool failed = false;
-
     auto filtered_packets = std::ranges::views::filter(packets, [handle_fake](const Packet &packet) {
         return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
     });
@@ -93,7 +91,6 @@ bool Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
             if (!res) {
                 SPDLOG_WARN(
                     "Wasn't able to split packet at {}:{}, because: {}", split_pos.arg, split_pos.offset, res.error());
-                failed = true;
             }
         }
     }
@@ -107,7 +104,6 @@ bool Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
             for (auto &packet : filtered_packets) {
                 if (!timestamp_val_offset(packet, ts_offset_.value())) {
                     SPDLOG_WARN("Failed to offset timestamp");
-                    failed = true;
                 }
             }
         } else {
@@ -136,15 +132,11 @@ bool Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
             SPDLOG_ERROR("Bad Checksum for protocols other than TCP hasn't been implemented yet");
         }
     }
-
-    return !failed;
 }
 
 void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
 {
     if (!check_ip(vec)) { return; }
-
-    bool failed = false;
 
     if (fake_blob_.has_value()) {
         const auto front_view = parse_packet_view(vec.front());
@@ -157,7 +149,7 @@ void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
         blob_packets.push_back(std::move(new_packet));
         blob_packets.front().is_fake_blob = true;
 
-        if (!process(blob_packets, true, conn)) { failed = true; }
+        process(blob_packets, true, conn);
 
         if (!badcksum_) {
             for (auto &packet : blob_packets) {
@@ -172,7 +164,7 @@ void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
         vec.insert(
             vec.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
     } else {
-        if (!process(vec, false, conn)) { failed = true; }
+        process(vec, false, conn);
     }
 }
 

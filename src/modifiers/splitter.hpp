@@ -21,7 +21,7 @@ class Splitter : public IModifier
     std::optional<std::uint8_t> ipv4_ttl;
 
     bool check_ip(const std::vector<Packet>& packets) const;
-    bool process(std::vector<Packet>& packets, const bool handle_fake, const Connection& conn);
+    void process(std::vector<Packet>& packets, const bool handle_fake, const Connection& conn);
 public:
     void modify(std::vector<Packet> &vec, const Connection& conn) override;
     [[nodiscard]] bool matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const override;
