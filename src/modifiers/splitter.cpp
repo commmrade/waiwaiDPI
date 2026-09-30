@@ -95,8 +95,8 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
     }
 
-    if (ipv4_ttl.has_value()) {
-        for (auto &packet : filtered_packets) { packet.network_hdr()->ttl = ipv4_ttl.value(); }
+    if (ipv4_ttl_.has_value()) {
+        for (auto &packet : filtered_packets) { packet.network_hdr()->ttl = ipv4_ttl_.value(); }
     }
 
     if (ts_offset_.has_value()) {
@@ -170,6 +170,9 @@ void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
 
 bool Splitter::matches(const std::vector<Packet>& packets, const Connection& conn) const
 {
+    if (l7_payload_.has_value()) {
+        return conn.payload_proto() == l7_payload_.value();
+    }
     return true;
 }
 
@@ -282,6 +285,16 @@ void Splitter::parse_config(const toml::table *table)
     if (ipv4_ttl_node != nullptr) {
         if (!ipv4_ttl_node->is_number()) { throw std::runtime_error("ipv4_ttl must be a number"); }
 
-        ipv4_ttl.emplace(ipv4_ttl_node->as_integer()->get());
+        ipv4_ttl_.emplace(ipv4_ttl_node->as_integer()->get());
+    }
+
+    const auto* l7_proto_node = table->get("l7_payload");
+    if (l7_proto_node != nullptr) {
+        if (!l7_proto_node->is_string()) {
+            throw std::runtime_error("l7_payload must be a string");
+        }
+
+        const auto proto_str = l7_proto_node->as_string()->get();
+        l7_payload_.emplace(string_to_proto(proto_str));
     }
 }

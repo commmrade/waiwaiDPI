@@ -34,7 +34,7 @@ std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
             }
             case ParseResult::REASSEMBLING: {
                 pkt.is_payload_reasm = true;
-                return std::unexpected{ ParseResult::REASSEMBLING };
+                return std::unexpected{ res.value() };
             }
             default: {
                 break;
@@ -45,7 +45,7 @@ std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
         }
     }
 
-    return std::unexpected{ParseResult::ERROR};
+    return std::unexpected{ParseResult::ERROR}; // no match for any classifier
 }
 
 void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
