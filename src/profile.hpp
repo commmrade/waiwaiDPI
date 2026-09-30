@@ -6,10 +6,8 @@
 #define WAIWAIDPI_PROFILE_HPP
 #include "classifier.hpp"
 #include "iptables.hpp"
-#include "modifiers/http_host_modifier.hpp"
 #include "modifiers/modifier.hpp"
 #include "modifiers/splitter.hpp"
-#include "modifiers/tls_modifier.hpp"
 
 #include <print>
 #include <toml++/impl/parser.hpp>
@@ -47,15 +45,7 @@ inline std::unique_ptr<PayloadClassifier> create_classifier(const std::string_vi
 
 inline std::unique_ptr<IModifier> create_modifier(const std::string_view name, const toml::table* table)
 {
-    if (name == TlsHandshakeModifier::name()) {
-        auto ret = std::make_unique<TlsHandshakeModifier>();
-        ret->parse_config(table);
-        return ret;
-    } else if (name == HttpHostModifier::name()) {
-        auto ret = std::make_unique<HttpHostModifier>();
-        ret->parse_config(table);
-        return ret;
-    } else if (name == Splitter::name()) {
+    if (name == Splitter::name()) {
         auto ret = std::make_unique<Splitter>();
         ret->parse_config(table);
         return ret;

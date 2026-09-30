@@ -5,14 +5,10 @@
 #include "argh.h"
 #include "consts.hpp"
 #include "iptables.hpp"
-
-#include "modifiers/http_host_modifier.hpp"
-#include "modifiers/tls_modifier.hpp"
 #include "nfq.hpp"
 #include "profile.hpp"
-#include <signal.h>
+#include <csignal>
 #include <spdlog/spdlog.h>
-
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstring>
@@ -27,7 +23,6 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <print>
-#include <signal.h>
 #include <toml++/toml.hpp>
 
 struct Context

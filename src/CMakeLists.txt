@@ -19,14 +19,10 @@ add_executable(main main.cpp
         classifiers/tls_classifier.cpp
         classifiers/tls_classifier.hpp
         modifiers/modifier.hpp
-        modifiers/http_host_modifier.cpp
-        modifiers/http_host_modifier.hpp
         checksum.cpp
         checksum.hpp
         modifiers/modifier.cpp
         hash.hpp
-        modifiers/tls_modifier.cpp
-        modifiers/tls_modifier.hpp
         profile.cpp
         profile.hpp
         iptables.cpp

@@ -50,17 +50,16 @@ add_executable(tests
         ../src/packet_view.cpp
         ../src/classifiers/http_classifier.cpp
         ../src/classifiers/tls_classifier.cpp
-        ../src/modifiers/http_host_modifier.cpp
         ../src/checksum.cpp
         ../src/modifiers/modifier.cpp
-        ../src/modifiers/tls_modifier.cpp
         ../src/modifiers/splitter.cpp
         ../src/modifiers/algorithms/split.cpp
         ../src/nfq.cpp
         tcp_state_tests.cpp
-        http_modifier_tests.cpp
-        tls_modifier_tests.cpp
-        splitter_tests.cpp
+        splitter_general_tests.cpp
+        splitter_tls_tests.cpp
+        splitter_common.hpp
+        splitter_http_tests.cpp
 )
 target_link_libraries(
   tests
