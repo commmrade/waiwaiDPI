@@ -172,9 +172,12 @@ static std::size_t calculate_split_offset(const Split& split, const std::size_t 
     return offset;
 }
 
-bool TlsHandshakeModifier::modify(std::vector<Packet> &vec, const Connection& conn)
+void TlsHandshakeModifier::modify(std::vector<Packet> &vec, const Connection& conn)
 {
-    return split::split(vec, split::SplitConfig{split_at_, std::nullopt}, conn);
+    auto res = split::split(vec, split::SplitConfig{.pos = split_at_, .hosts = std::nullopt, .handle_fake = false}, conn);
+    if (!res) {
+        SPDLOG_WARN("Wasn't able to split packet at {}:{} - {}", split_at_.arg, split_at_.offset, res.error());
+    }
 }
 
 bool TlsHandshakeModifier::matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const

@@ -224,7 +224,7 @@ static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
 }// namespace helpers
 
 
-bool split::split(std::vector<Packet>& packets, const SplitConfig& cfg, const Connection& conn)
+std::expected<bool, std::string> split::split(std::vector<Packet>& packets, const SplitConfig& cfg, const Connection& conn)
 {
     std::vector<char> full_payload;
     for (const auto &pkt : packets) {
@@ -240,7 +240,7 @@ bool split::split(std::vector<Packet>& packets, const SplitConfig& cfg, const Co
     return split(packets, cfg, full_payload, conn);
 }
 
-bool split::split(std::vector<Packet>& packets, const SplitConfig& cfg, const std::vector<char>& full_payload, const Connection& conn)
+std::expected<bool, std::string> split::split(std::vector<Packet>& packets, const SplitConfig& cfg, const std::vector<char>& full_payload, const Connection& conn)
 {
     // split based on application protocol, each protocol have a unique set of usable markers
     switch (const auto pl_proto = conn.payload_proto()) {
@@ -256,7 +256,7 @@ bool split::split(std::vector<Packet>& packets, const SplitConfig& cfg, const st
     }
 }
 
-bool split::split_http(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
+std::expected<bool, std::string> split::split_http(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
 {
     const std::string_view payload_str{ full_payload };
 
@@ -265,21 +265,20 @@ bool split::split_http(std::vector<Packet>& packets, const std::vector<char>& fu
         return std::tolower(ch1) == std::tolower(ch2);
     });
     if (host_subrange.empty()) {
-        SPDLOG_ERROR("Did not find 'Host' in HTTP headers");
-        return false;
+        SPDLOG_WARN("Did not find 'Host' in HTTP headers");
+        return {false};
     }
     const auto host_pos = std::distance(payload_str.begin(), host_subrange.begin());
     const auto host_end = payload_str.find("\r\n", static_cast<std::size_t>(host_pos));
     if (host_end == std::string::npos) {
-        SPDLOG_ERROR("Did not find 'Host' header end in HTTP headers");
-        return false;
+        return std::unexpected{"Did not find 'Host' header in HTTP headers"};
     }
 
     std::string_view const host{ payload_str.data() + host_pos + HOST_HEADER_NAME.size() + 1,
         payload_str.data() + host_end };
     if (cfg.hosts.has_value() && !cfg.hosts.value().contains(std::string{ host })) {
         SPDLOG_INFO("Host {} is not in allowed hosts list, skip", host);
-        return false;
+        return {false};
     }
 
     std::size_t split_pos = 0;
@@ -302,25 +301,25 @@ bool split::split_http(std::vector<Packet>& packets, const std::vector<char>& fu
     // split iter packet at split_pos_relative_to_packet
     if (split_pos_relative_to_packet == 0) {
         // already split naturally
-        return true;
+        return {true};
     }
 
     helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
-    return true;
+    return {true};
 }
 
-bool split::split_tls(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
+std::expected<bool, std::string> split::split_tls(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
 {
     const auto sni_opt = helpers::get_sni(full_payload);
     if (!sni_opt.has_value()) {
-        std::println(std::cerr, "SNI Extension was not found in this handshake");
-        return false;
+        SPDLOG_WARN("SNI Extension was not found in this handshake");
+        return {false};
     }
 
     const auto &[sni_str, sniext_offset] = sni_opt.value();
     if (cfg.hosts.has_value() && !cfg.hosts.value().contains(std::string{ sni_str.data() })) {
         SPDLOG_INFO("Host {} is not in allowed hosts list, skip", sni_str);
-        return false;
+        return {false};
     }
 
     const auto sni_str_pos =
@@ -348,14 +347,14 @@ bool split::split_tls(std::vector<Packet>& packets, const std::vector<char>& ful
     // split iter packet at split_pos_relative_to_packet
     if (split_pos_relative_to_packet == 0) {
         // already split naturally
-        return true;
+        return {true};
     }
 
     helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
-    return true;
+    return {true};
 }
 
-bool split::split_other(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
+std::expected<bool, std::string> split::split_other(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
 {
     const auto split_pos = cfg.pos.offset;
 
@@ -363,13 +362,13 @@ bool split::split_other(std::vector<Packet>& packets, const std::vector<char>& f
     // split iter packet at split_pos_relative_to_packet
     if (split_pos_relative_to_packet == 0) {
         // already split naturally
-        return true;
+        return {true};
     }
 
     if (packets.front().network_hdr()->protocol == IPPROTO_TCP) {
         helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
     } else {
-        throw std::runtime_error("Other protocols aren't supported yet");
+        return std::unexpected{"Wasn't able to split packets because other protocols besides TCP are not supported"};
     }
-    return true;
+    return {true};
 }

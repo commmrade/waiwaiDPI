@@ -3,18 +3,13 @@
 //
 
 #include "modifier.hpp"
-bool Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
+void Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
 {
-    bool updated = false;
     for (auto &modifier : modifiers_) {
         if (!modifier->matches(conn.get_l4_proto(), conn.payload_proto())) {
             continue;
         }
 
-        if (modifier->modify(vec, conn)) {
-            updated = true;
-        }
+        modifier->modify(vec, conn);
     }
-
-    return updated;
 }

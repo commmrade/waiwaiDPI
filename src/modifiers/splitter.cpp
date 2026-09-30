@@ -29,7 +29,7 @@ static bool timestamp_val_offset(Packet &packet, const int offset)
     auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
     std::span<char> tcp_bytes{ static_cast<char *>(packet.transport_hdr()), static_cast<std::size_t>(tcp->doff * 4) };
     if (tcp_bytes.size() <= sizeof(tcphdr)) {
-        return false; // no TCP options
+        return false;// no TCP options
     }
 
     constexpr static std::uint8_t TS_OPT_KIND = 8;
@@ -56,12 +56,10 @@ static bool timestamp_val_offset(Packet &packet, const int offset)
             continue;
         }
 
-        if (size < TS_OPT_SIZE || size > TS_OPT_SIZE) {
-            return false;
-        }
+        if (size < TS_OPT_SIZE || size > TS_OPT_SIZE) { return false; }
 
-        auto* tv = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2));
-        auto* tr = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2 + sizeof(*tv)));
+        auto *tv = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2));
+        auto *tr = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2 + sizeof(*tv)));
 
         *tv = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tv)) + offset));
         *tr = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tr)) + offset));
@@ -76,7 +74,7 @@ bool Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
 {
     bool failed = false;
 
-    auto filtered_packets = std::ranges::views::filter(packets, [handle_fake](const Packet& packet) {
+    auto filtered_packets = std::ranges::views::filter(packets, [handle_fake](const Packet &packet) {
         return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
     });
     if (!splits_.empty()) {
@@ -88,20 +86,20 @@ bool Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
 
         for (const auto &split_pos : splits_) {
-            if (!split::split(packets,
-                    split::SplitConfig{ .pos = split_pos, .hosts = allowed_hosts_, .handle_fake = handle_fake },
-                    full_payload,
-                    conn)) {
-                SPDLOG_WARN("Wasn't able to split packet at {}:{}", split_pos.arg, split_pos.offset);
+            auto res = split::split(packets,
+                split::SplitConfig{ .pos = split_pos, .hosts = allowed_hosts_, .handle_fake = handle_fake },
+                full_payload,
+                conn);
+            if (!res) {
+                SPDLOG_WARN(
+                    "Wasn't able to split packet at {}:{}, because: {}", split_pos.arg, split_pos.offset, res.error());
                 failed = true;
             }
         }
     }
 
     if (ipv4_ttl.has_value()) {
-        for (auto &packet : filtered_packets) {
-            packet.network_hdr()->ttl = ipv4_ttl.value();
-        }
+        for (auto &packet : filtered_packets) { packet.network_hdr()->ttl = ipv4_ttl.value(); }
     }
 
     if (ts_offset_.has_value()) {
@@ -142,9 +140,9 @@ bool Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
     return !failed;
 }
 
-bool Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
+void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
 {
-    if (!check_ip(vec)) { return false; }
+    if (!check_ip(vec)) { return; }
 
     bool failed = false;
 
@@ -176,8 +174,6 @@ bool Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
     } else {
         if (!process(vec, false, conn)) { failed = true; }
     }
-
-    return !failed;
 }
 
 bool Splitter::matches([[maybe_unused]] const std::uint8_t l4_proto, [[maybe_unused]] const L7Proto l7_proto) const

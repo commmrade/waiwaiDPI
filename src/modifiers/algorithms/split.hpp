@@ -9,6 +9,7 @@
 #include "../split.hpp"
 
 
+#include <expected>
 #include <unordered_set>
 #include <vector>
 
@@ -20,12 +21,12 @@ namespace split {
         bool handle_fake;
     };
 
-    bool split(std::vector<Packet>& packets, const SplitConfig& cfg, const Connection& conn);
-    bool split(std::vector<Packet>& packets, const SplitConfig& cfg, const std::vector<char>& full_payload, const Connection& conn);
+    std::expected <bool, std::string> split(std::vector<Packet> &packets, const SplitConfig &cfg, const Connection &conn);
+    std::expected<bool, std::string> split(std::vector<Packet>& packets, const SplitConfig& cfg, const std::vector<char>& full_payload, const Connection& conn);
 
-    bool split_http(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
-    bool split_tls(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
-    bool split_other(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
+    std::expected<bool, std::string> split_http(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
+    std::expected<bool, std::string> split_tls(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
+    std::expected<bool, std::string> split_other(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
 }
 
 #endif// WAIWAIDPI_SPLIT_HPP
