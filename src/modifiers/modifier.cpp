@@ -6,7 +6,7 @@
 void Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
 {
     for (auto &modifier : modifiers_) {
-        if (!modifier->matches(conn.get_l4_proto(), conn.payload_proto())) {
+        if (!modifier->matches(vec, conn)) {
             continue;
         }
 

@@ -27,9 +27,9 @@ void HttpHostModifier::modify(std::vector<Packet> &vec, const Connection& conn)
         SPDLOG_WARN("Wasn't able to split packet at {}:{}, because: {}", split_at_.arg, split_at_.offset, res.error());
     }
 }
-bool HttpHostModifier::matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const
+bool HttpHostModifier::matches(const std::vector<Packet>& packets, const Connection& conn) const
 {
-    return l7_proto == L7Proto::HTTP && l4_proto == IPPROTO_TCP;
+    return conn.payload_proto() == L7Proto::HTTP && conn.get_l4_proto() == IPPROTO_TCP;
 }
 void HttpHostModifier::parse_config(const toml::table *table)
 {

@@ -168,7 +168,7 @@ void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
     }
 }
 
-bool Splitter::matches([[maybe_unused]] const std::uint8_t l4_proto, [[maybe_unused]] const L7Proto l7_proto) const
+bool Splitter::matches(const std::vector<Packet>& packets, const Connection& conn) const
 {
     return true;
 }

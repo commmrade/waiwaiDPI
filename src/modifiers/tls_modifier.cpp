@@ -180,9 +180,9 @@ void TlsHandshakeModifier::modify(std::vector<Packet> &vec, const Connection& co
     }
 }
 
-bool TlsHandshakeModifier::matches(const std::uint8_t l4_proto, const L7Proto l7_proto) const
+bool TlsHandshakeModifier::matches(const std::vector<Packet>& packets, const Connection& conn) const
 {
-    return l4_proto == IPPROTO_TCP && l7_proto == L7Proto::TLS_HANDSHAKE;
+    return conn.get_l4_proto() == IPPROTO_TCP && conn.payload_proto() == L7Proto::TLS_HANDSHAKE;
 }
 
 void TlsHandshakeModifier::parse_config(const toml::table *table)
