@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <print>
+#include <ranges>
 #include <spdlog/spdlog.h>
 
 namespace helpers {
@@ -32,14 +33,15 @@ static std::size_t do_operation(const std::size_t start, const Split::Operation 
 static std::pair<std::vector<Packet>::iterator, std::size_t> find_packet_by_offset(std::vector<Packet> &packets,
     const std::size_t split_pos, bool handle_fake)
 {
-    auto iter = packets.begin();
+    auto filtered_packets = std::ranges::views::filter(packets, [handle_fake](const Packet &packet) {
+        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+    });
+
+    auto iter = filtered_packets.begin();
     std::size_t offset = 0;
     std::size_t split_pos_relative_to_packet = 0;
-    for (; iter != packets.end(); ++iter) {
-        if (!handle_fake && iter->is_fake_blob) {
-            continue;
-        }
 
+    for (; iter != filtered_packets.end(); ++iter) {
         offset += iter->payload().size();
         if (split_pos < offset) {
             split_pos_relative_to_packet = split_pos - (offset - iter->payload().size());
@@ -47,7 +49,7 @@ static std::pair<std::vector<Packet>::iterator, std::size_t> find_packet_by_offs
         }
     }
 
-    return { iter, split_pos_relative_to_packet };
+    return { iter.base(), split_pos_relative_to_packet };
 }
 
 // <new span, success>
@@ -226,11 +228,12 @@ static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
 std::expected<bool, std::string> split::split(std::vector<Packet>& packets, const SplitConfig& cfg, const Connection& conn)
 {
     std::vector<char> full_payload;
-    for (const auto &pkt : packets) {
-        if (!cfg.handle_fake && pkt.is_fake_blob) {
-            continue;
-        }
 
+    auto filtered_packets = std::ranges::views::filter(packets, [handle_fake = cfg.handle_fake](const Packet &packet) {
+        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+    });
+
+    for (const auto& pkt : filtered_packets) {
         const auto payload = pkt.payload();
         full_payload.insert(full_payload.end(), payload.begin(), payload.end());
     }
