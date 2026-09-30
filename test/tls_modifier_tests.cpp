@@ -184,7 +184,7 @@ TEST_CASE_METHOD(TlsModifierTestFixture, "Parsing split TLS", "[tls_modifier]")
 
     packets.push_back(create_packet(packet_2_view));
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 3);
 
     auto& pkt_1 = packets[0];

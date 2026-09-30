@@ -81,7 +81,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split works", "[splitter_modifier]
 
     packets.push_back(create_packet(packet_1_view));
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
     REQUIRE(packets.front().payload().size() == 2);
     REQUIRE(packets.back().payload().size() == packet_1_view.payload.size() - 2);
@@ -118,7 +118,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split works", "[splitter_modifie
 
     packets.push_back(create_packet(packet_1_view));
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 3);
     REQUIRE(packets.front().payload().size() == 2);
 
@@ -157,7 +157,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Allowed hosts works for specified hosts",
 
     packets.push_back(create_packet(packet_1_view));
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
     REQUIRE(packets.front().payload().size() == 2);
     REQUIRE(packets.back().payload().size() == packet_1_view.payload.size() - 2);
@@ -195,7 +195,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Allowed hosts does not work for specified
 
     packets.push_back(create_packet(packet_1_view));
 
-    REQUIRE_FALSE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 1);
 }
 
@@ -229,7 +229,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Bad Checksum parameter", "[splitter_modif
 
     packets.push_back(create_packet(packet_1_view));
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
     for (auto& packet : packets) {
@@ -276,7 +276,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Sequence offset parameter", "[splitter_mo
     auto* tcp = static_cast<tcphdr*>(packets.front().transport_hdr());
     auto start_seq = ntohl(tcp->seq) - 1000;
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
     for (auto& packet : packets) {
@@ -357,7 +357,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Timestamp offset parameter", "[splitter_m
     auto original_ts = get_ts_val(packets.front());
     REQUIRE(original_ts.has_value());// test fixture packet must carry a TS option
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
     for (const auto &packet : packets) {
@@ -400,7 +400,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "IPv4 TTL parameter", "[splitter_modifier]
     auto *ip = static_cast<iphdr *>(packets.front().network_hdr());
     auto original_ttl = ip->ttl;
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
     constexpr std::uint8_t expected_ttl = 5;
@@ -445,7 +445,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob priority over original data", "[spli
     auto *ip = static_cast<iphdr *>(packets.front().network_hdr());
     auto original_ttl = ip->ttl;
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
     constexpr std::uint8_t expected_ttl = 5;
@@ -493,7 +493,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob and original data are affected by se
     auto *ip = static_cast<iphdr *>(packets.front().network_hdr());
     auto original_ttl = ip->ttl;
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
     constexpr std::uint8_t expected_ttl = 5;

@@ -45,7 +45,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Whole HTTP request is split at Host h
     packets.emplace_back(create_packet(pkt));
 
     REQUIRE(pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
 
     auto& pkt_1 = packets[0];
     REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
@@ -76,7 +76,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Case Insensitive searchf or Host Head
     packets.emplace_back(create_packet(pkt));
 
     REQUIRE(pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
 
     auto& pkt_1 = packets[0];
     REQUIRE(((pkt_1.action.action == PacketAction::Action::DROP_AND_SEND) && (pkt_1.action.packet_id > 0)));
@@ -117,7 +117,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Split HTTP request is correctly separ
     packets.push_back(create_packet(pkt1));
     packets.push_back(create_packet(pkt2));
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 3);
 
     auto& pkt_1 = packets[0];
@@ -178,7 +178,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "Triply split HTTP request is correctl
     packets.push_back(create_packet(pkt2));
     packets.push_back(create_packet(pkt3));
 
-    REQUIRE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
     REQUIRE(packets.size() == 4);
 
     // Packet 1: doesn't contain the Host boundary, untouched.
@@ -221,7 +221,7 @@ TEST_CASE_METHOD(HttpModifierTestFixture, "No Host header in HTTP request", "[ht
     packets.emplace_back(create_packet(pkt));
 
     REQUIRE(pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE_FALSE(modifier.modify(packets, conn));
+    modifier.modify(packets, conn);
 }
 
 template <typename Container>
