@@ -105,9 +105,43 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
                 if (!timestamp_val_offset(packet, ts_offset_.value())) {
                     SPDLOG_WARN("Failed to offset timestamp");
                 }
+
+                auto* tcp = static_cast<tcphdr *>(packet.transport_hdr());
+                tcp->check = 0;
+                tcp->check = calc_tcp_checksum(packet);
             }
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
+        }
+    }
+
+    if (seqovl_.has_value()) {
+        if (conn.get_l4_proto() == IPPROTO_TCP) {
+            auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
+                return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+            });
+            iter = packets.begin() + std::min<int>(packets.size(), 3);
+            if (iter != packets.end()) {
+                auto& packet = *iter;
+                const auto packet_view = parse_packet_view(packet);
+                const auto packet_pl = packet.payload();
+
+                std::vector<char> new_payload(packet.payload().size() + static_cast<std::size_t>(seqovl_.value()), 0); // TODO: set seqovl-pattern
+                std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(seqovl_.value())), packet_pl.data(), packet_pl.size());
+
+                auto new_packet = create_packet_from(packet_view, new_payload);
+                new_packet.is_fake_blob = packet.is_fake_blob;
+                new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
+
+                auto* tcp = static_cast<tcphdr*>(new_packet.transport_hdr());
+                tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value()));
+                tcp->check = 0;
+                tcp->check = calc_tcp_checksum(new_packet);
+
+                std::swap(packet, new_packet);
+            }
+        } else {
+            SPDLOG_ERROR("Seqovl is defined but the L4 protocol is not TCP");
         }
     }
 
@@ -116,9 +150,11 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
             for (auto &packet : filtered_packets) {
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
                 tcp->seq = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + seq_offset_.value()));
+                tcp->check = 0;
+                tcp->check = calc_tcp_checksum(packet);
             }
         } else {
-            SPDLOG_WARN("Seq. Offset is defined but the protocol is not TCP");
+            SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
     }
 
@@ -126,6 +162,7 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             for (auto &packet : filtered_packets) {
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+                tcp->check = 0;
                 tcp->check = htonl(rand() % 256);
             }
         } else {
@@ -296,5 +333,14 @@ void Splitter::parse_config(const toml::table *table)
 
         const auto proto_str = l7_proto_node->as_string()->get();
         l7_payload_.emplace(string_to_proto(proto_str));
+    }
+
+    const auto* seqovl_node = table->get("seqovl");
+    if (seqovl_node != nullptr) {
+        if (!seqovl_node->is_integer()) {
+            throw std::runtime_error("seqovl must be an integer");
+        }
+
+        seqovl_.emplace(seqovl_node->as_integer()->get());
     }
 }
