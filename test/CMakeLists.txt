@@ -57,6 +57,7 @@ add_executable(tests
         ../src/nfq.cpp
         tcp_state_tests.cpp
         splitter_general_tests.cpp
+        ../src/iface.cpp
         splitter_tls_tests.cpp
         splitter_common.hpp
         splitter_http_tests.cpp

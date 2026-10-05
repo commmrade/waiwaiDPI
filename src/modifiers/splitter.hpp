@@ -24,6 +24,8 @@ class Splitter : public IModifier
 
     bool check_ip(const std::vector<Packet>& packets) const;
     void process(std::vector<Packet>& packets, const bool handle_fake, const Connection& conn);
+
+    void seqovl(std::vector<Packet>& packets, bool handle_fake, const Connection& conn);
 public:
     void modify(std::vector<Packet> &vec, const Connection& conn) override;
     [[nodiscard]] bool matches(const std::vector<Packet>& packets, const Connection& conn) const override;

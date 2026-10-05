@@ -114,81 +114,7 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
     }
 
     if (seqovl_.has_value()) {
-        if (conn.get_l4_proto() == IPPROTO_TCP) {
-            auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
-                return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
-            });
-            if (iter != packets.end()) {
-                auto &packet = *iter;
-                const auto packet_view = parse_packet_view(packet);
-                const auto packet_pl = packet.payload();
-
-                std::vector<char> new_payload(
-                    packet.payload().size() + static_cast<std::size_t>(seqovl_.value()), 0);// TODO: set seqovl-pattern
-                std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(seqovl_.value())),
-                    packet_pl.data(),
-                    packet_pl.size());
-
-                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                auto *ip = packet.network_hdr();
-
-                const auto mss = static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr))
-                                 - (tcp->doff * 4 - sizeof(tcp));
-
-
-                if (new_payload.size() > mss) {
-                    std::span<const char> payload{ new_payload };
-
-                    std::vector<Packet> splitted;
-                    splitted.reserve((new_payload.size() / mss) + 1);
-
-                    auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value());
-
-                    while (!payload.empty()) {
-                        const auto chunk_size = std::min(payload.size(), mss);
-
-                        auto new_packet = create_packet_from(packet_view, payload.subspan(0, chunk_size));
-                        new_packet.is_fake_blob = packet.is_fake_blob;
-                        new_packet.action.action = PacketAction::Action::SEND;
-                        new_packet.action.packet_id = 0;
-
-                        tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
-                        tcp->seq = htonl(start_seq);
-                        tcp->check = 0;
-                        tcp->check = calc_tcp_checksum(new_packet);
-
-                        splitted.push_back(std::move(new_packet));
-
-                        payload = payload.subspan(chunk_size);
-                        start_seq += chunk_size;
-                    }
-
-                    if (packet.action.action == PacketAction::Action::SEND) {
-                        splitted.front().action.action = PacketAction::Action::SEND;
-                    } else {
-                        splitted.front().action.action = PacketAction::Action::DROP_AND_SEND;
-                        splitted.front().action.packet_id = packet.action.packet_id;
-                    }
-
-                    iter = packets.erase(iter);
-                    packets.insert(
-                        iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
-                } else {
-                    auto new_packet = create_packet_from(packet_view, new_payload);
-                    new_packet.is_fake_blob = packet.is_fake_blob;
-                    new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
-
-                    auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
-                    tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value()));
-                    tcp->check = 0;
-                    tcp->check = calc_tcp_checksum(new_packet);
-
-                    std::swap(packet, new_packet);
-                }
-            }
-        } else {
-            SPDLOG_ERROR("Seqovl is defined but the L4 protocol is not TCP");
-        }
+        seqovl(packets, handle_fake, conn);
     }
 
     if (seq_offset_.has_value()) {
@@ -214,6 +140,132 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         } else {
             SPDLOG_ERROR("Bad Checksum for protocols other than TCP hasn't been implemented yet");
         }
+    }
+}
+
+static std::vector<Packet> segmentize(std::span<const char> full_payload, unsigned long mss, const Packet& orig_packet, unsigned start_seq)
+{
+    auto packet_view = parse_packet_view(orig_packet);
+    std::span<const char> payload{ full_payload };
+
+    std::vector<Packet> splitted;
+    splitted.reserve((full_payload.size() / mss) + 1);
+
+    while (!payload.empty()) {
+        const auto chunk_size = std::min<std::size_t>(payload.size(), mss);
+
+        auto new_packet = create_packet_from(packet_view, payload.subspan(0, chunk_size));
+        new_packet.is_fake_blob = orig_packet.is_fake_blob;
+        new_packet.action.action = PacketAction::Action::SEND;
+        new_packet.action.packet_id = 0;
+
+        auto* tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
+        tcp->seq = htonl(start_seq);
+        tcp->check = 0;
+        tcp->check = calc_tcp_checksum(new_packet);
+
+        splitted.push_back(std::move(new_packet));
+
+        payload = payload.subspan(chunk_size);
+        start_seq += chunk_size;
+    }
+
+    if (orig_packet.action.action == PacketAction::Action::SEND) {
+        splitted.front().action.action = PacketAction::Action::SEND;
+    } else {
+        splitted.front().action.action = PacketAction::Action::DROP_AND_SEND;
+        splitted.front().action.packet_id = orig_packet.action.packet_id;
+    }
+
+    return splitted;
+}
+
+void Splitter::seqovl(std::vector<Packet>& packets, bool handle_fake, const Connection& conn)
+{
+    if (conn.get_l4_proto() == IPPROTO_TCP) {
+        auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
+            return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+        });
+
+        if (iter == packets.end()) {
+            return;
+        }
+
+        auto &packet = *iter;
+        const auto packet_view = parse_packet_view(packet);
+        const auto packet_pl = packet.payload();
+
+        std::vector<char> new_payload(
+            packet.payload().size() + static_cast<std::size_t>(seqovl_.value()), 0);// TODO: set seqovl-pattern
+        std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(seqovl_.value())),
+            packet_pl.data(),
+            packet_pl.size());
+
+        auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+        auto *ip = packet.network_hdr();
+
+        const auto mss = static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr))
+                         - (tcp->doff * 4 - sizeof(tcp));
+
+        if (new_payload.size() > mss) {
+            // std::span<const char> payload{ new_payload };
+            //
+            // std::vector<Packet> splitted;
+            // splitted.reserve((new_payload.size() / mss) + 1);
+            //
+            // auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value());
+            //
+            // while (!payload.empty()) {
+            //     const auto chunk_size = std::min(payload.size(), mss);
+            //
+            //     auto new_packet = create_packet_from(packet_view, payload.subspan(0, chunk_size));
+            //     new_packet.is_fake_blob = packet.is_fake_blob;
+            //     new_packet.action.action = PacketAction::Action::SEND;
+            //     new_packet.action.packet_id = 0;
+            //
+            //     tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
+            //     tcp->seq = htonl(start_seq);
+            //     tcp->check = 0;
+            //     tcp->check = calc_tcp_checksum(new_packet);
+            //
+            //     splitted.push_back(std::move(new_packet));
+            //
+            //     payload = payload.subspan(chunk_size);
+            //     start_seq += chunk_size;
+            // }
+            //
+            // if (packet.action.action == PacketAction::Action::SEND) {
+            //     splitted.front().action.action = PacketAction::Action::SEND;
+            // } else {
+            //     splitted.front().action.action = PacketAction::Action::DROP_AND_SEND;
+            //     splitted.front().action.packet_id = packet.action.packet_id;
+            // }
+
+            auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value());
+            auto splitted = segmentize(new_payload, mss, packet, start_seq);
+
+            iter = packets.erase(iter);
+            packets.insert(
+                iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
+        } else {
+            auto new_packet = create_packet_from(packet_view, new_payload);
+            new_packet.is_fake_blob = packet.is_fake_blob;
+            if (packet.action.action == PacketAction::Action::SEND) {
+                new_packet.action.action = PacketAction::Action::SEND;
+            } else {
+                new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
+                new_packet.action.packet_id = packet.action.packet_id;
+            }
+
+            auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr()); //NOLINT
+            tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value()));
+            tcp->check = 0;
+            tcp->check = calc_tcp_checksum(new_packet);
+
+            std::swap(packet, new_packet);
+        }
+    } else {
+        SPDLOG_ERROR("Seqovl is defined but the L4 protocol is not TCP");
     }
 }
 
