@@ -33,6 +33,7 @@ add_executable(main main.cpp
         modifiers/algorithms/split.cpp
         modifiers/algorithms/split.hpp
         iface.hpp
+        iface.cpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})

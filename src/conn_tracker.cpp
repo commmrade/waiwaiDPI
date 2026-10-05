@@ -30,29 +30,24 @@ void Connection::set_l4_proto(const std::uint8_t proto)
     }
     }
 }
+
 int Connection::get_mss() const
 {
     const auto proto = get_l4_proto();
     if (proto == IPPROTO_TCP) {
         return get_l4_tcp().mss;
     } else {
-        constexpr auto MTU_DEFAULT = 1500;
         if (!mtu_.has_value()) {
-            const auto iface_name = iface_find(&saddr_);
-            if (iface_name.has_value()) {
-                const auto mtu = iface_get_mtu(iface_name.value());
-                if (mtu.has_value()) {
-                    mtu_.emplace(mtu.value());
-                } else {
-                    SPDLOG_ERROR("Failed to get MTU for interface {}: {}", iface_name.value(), mtu.error());
-                    mtu_.emplace(MTU_DEFAULT);
-                }
+            constexpr auto MTU_DEFAULT = 1500;
+            const auto mtu = iface_find_and_get_mtu(&saddr_);
+            if (mtu.has_value()) {
+                mtu_.emplace(mtu.value());
             } else {
-                SPDLOG_ERROR("Failed to find an interface: {}", iface_name.error());
+                SPDLOG_ERROR("Couldn't get mtu: {}", mtu.error());
                 mtu_.emplace(MTU_DEFAULT);
             }
         }
-        return mtu_.value() - sizeof(iphdr) - sizeof(udphdr);
+        return static_cast<int>(static_cast<unsigned long>(mtu_.value()) - sizeof(iphdr) - sizeof(udphdr));
     }
 }
 void Connection::set_mss(const int mss)
