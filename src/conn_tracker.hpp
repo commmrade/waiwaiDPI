@@ -79,6 +79,7 @@ public:
     void set_l4_proto(const std::uint8_t proto);
 
     int get_mss() const;
+    void set_mss(const int mss);
 
     bool is_reassembling() const { return reasm_.pos > 0 || reasm_.total_size > 0; }
 

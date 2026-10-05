@@ -51,9 +51,16 @@ int Connection::get_mss() const
                 SPDLOG_ERROR("Failed to find an interface: {}", iface_name.error());
                 mtu_.emplace(MTU_DEFAULT);
             }
-        } else {
-            return mtu_.value() - sizeof(iphdr) - sizeof(udphdr);
         }
+        return mtu_.value() - sizeof(iphdr) - sizeof(udphdr);
+    }
+}
+void Connection::set_mss(const int mss)
+{
+    if (get_l4_proto() == IPPROTO_TCP) {
+        std::get<Tcp>(l4_state_).mss = mss;
+    } else {
+        throw std::runtime_error{"Not supported"};
     }
 }
 void Connection::reset_reasm()

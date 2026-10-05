@@ -118,7 +118,6 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
             auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
                 return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
             });
-            iter = packets.begin() + std::min<int>(packets.size(), 3);
             if (iter != packets.end()) {
                 auto &packet = *iter;
                 const auto packet_view = parse_packet_view(packet);
@@ -276,8 +275,6 @@ void Splitter::parse_config(const toml::table *table)
             }
             splits_.push_back(std::move(new_split));
         }
-    } else {
-        SPDLOG_WARN("'split_at' parameter for {} is not specified, but it defaults to 0", Splitter::name());
     }
 
     const auto *hosts_node = table->get("allowed_hosts");

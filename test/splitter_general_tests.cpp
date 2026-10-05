@@ -263,7 +263,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob priority over original data", "[spli
     REQUIRE(packets.back().network_hdr()->ttl == original_ttl);
 }
 
-TEST_CASE_METHOD(SplitterTestFixture, "Blob and original data are affected by separate modifiers", "[split_modifier]")
+TEST_CASE_METHOD(SplitterTestFixture, "Blob and original data are affected by separate modifiers", "[splitter_modifier]")
 {
 
     constexpr std::string_view config = R"toml(
@@ -309,4 +309,195 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob and original data are affected by se
 
     REQUIRE(packets.front().network_hdr()->ttl == 5);
     REQUIRE(packets.back().network_hdr()->ttl == 14);
+}
+
+TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for fake blob", "[splitter_modifier]")
+{
+    constexpr std::string_view config = R"toml(
+    [profile.1]
+    port = 443
+    protocol = "tcp"
+
+    [[profile.1.classifiers]]
+    name = "tls_handshake_classifier"
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    fake_blob = "/home/klewy/Downloads/tls_clienthello_www_google_com.bin"
+    seqovl = 100
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    badcksum = true
+    )toml";
+    build_tls_splitter(config);
+
+    std::vector<Packet> packets;
+    PacketView packet_1_view = parse_packet_view(bytes_span);
+    tracker.track(packet_1_view);
+    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
+        packet_1_view.get_source_port(),
+        packet_1_view.network_hdr->daddr,
+        packet_1_view.get_dest_port(),
+        packet_1_view.network_hdr->protocol);
+    conn.set_mss(1440);
+
+    auto res = classifier.classify(packet_1_view);
+    REQUIRE(res == ParseResult::SUCCESS);
+
+    packets.push_back(create_packet(packet_1_view));
+
+    modifier.modify(packets, conn);
+    REQUIRE(packets.size() == 2);
+
+    const auto& front_pkt = packets.front();
+    const auto payload = front_pkt.payload();
+
+    const std::array<char, 100> zeros{};
+
+    REQUIRE(std::memcmp(payload.data(), zeros.data(), zeros.size()) == 0);
+}
+
+TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for original data", "[splitter_modifier]")
+{
+    constexpr std::string_view config = R"toml(
+    [profile.1]
+    port = 443
+    protocol = "tcp"
+
+    [[profile.1.classifiers]]
+    name = "tls_handshake_classifier"
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    fake_blob = "/home/klewy/Downloads/tls_clienthello_www_google_com.bin"
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    seqovl = 100
+    )toml";
+    build_tls_splitter(config);
+
+    std::vector<Packet> packets;
+    PacketView packet_1_view = parse_packet_view(bytes_span);
+    tracker.track(packet_1_view);
+    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
+        packet_1_view.get_source_port(),
+        packet_1_view.network_hdr->daddr,
+        packet_1_view.get_dest_port(),
+        packet_1_view.network_hdr->protocol);
+    conn.set_mss(1800);
+
+    auto res = classifier.classify(packet_1_view);
+    REQUIRE(res == ParseResult::SUCCESS);
+
+    packets.push_back(create_packet(packet_1_view));
+
+    modifier.modify(packets, conn);
+    REQUIRE(packets.size() == 2);
+
+    const auto& front_pkt = packets.back();
+    const auto payload = front_pkt.payload();
+
+    const std::array<char, 100> zeros{};
+
+    REQUIRE(std::memcmp(payload.data(), zeros.data(), zeros.size()) == 0);
+}
+
+TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for both fake and original data", "[splitter_modifier]")
+{
+    constexpr std::string_view config = R"toml(
+    [profile.1]
+    port = 443
+    protocol = "tcp"
+
+    [[profile.1.classifiers]]
+    name = "tls_handshake_classifier"
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    fake_blob = "/home/klewy/Downloads/tls_clienthello_www_google_com.bin"
+    seqovl = 100
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    seqovl = 100
+    )toml";
+    build_tls_splitter(config);
+
+    std::vector<Packet> packets;
+    PacketView packet_1_view = parse_packet_view(bytes_span);
+    tracker.track(packet_1_view);
+    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
+        packet_1_view.get_source_port(),
+        packet_1_view.network_hdr->daddr,
+        packet_1_view.get_dest_port(),
+        packet_1_view.network_hdr->protocol);
+    conn.set_mss(1800);
+
+    auto res = classifier.classify(packet_1_view);
+    REQUIRE(res == ParseResult::SUCCESS);
+
+    packets.push_back(create_packet(packet_1_view));
+
+    modifier.modify(packets, conn);
+    REQUIRE(packets.size() == 2);
+
+    const auto& front_pkt = packets.front();
+    const auto& back_pkt = packets.back();
+    const auto front_payload = front_pkt.payload();
+    const auto back_payload = back_pkt.payload();
+
+    const std::array<char, 100> zeros{};
+    REQUIRE(std::memcmp(front_payload.data(), zeros.data(), zeros.size()) == 0);
+    REQUIRE(std::memcmp(back_payload.data(), zeros.data(), zeros.size()) == 0);
+}
+
+TEST_CASE_METHOD(SplitterTestFixture, "Seqovl segmentation", "[splitter_modifier]")
+{
+    constexpr std::string_view config = R"toml(
+    [profile.1]
+    port = 443
+    protocol = "tcp"
+
+    [[profile.1.classifiers]]
+    name = "tls_handshake_classifier"
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    seqovl = 3142
+    )toml";
+    build_tls_splitter(config);
+
+    std::vector<Packet> packets;
+    PacketView packet_1_view = parse_packet_view(bytes_span);
+    tracker.track(packet_1_view);
+    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
+        packet_1_view.get_source_port(),
+        packet_1_view.network_hdr->daddr,
+        packet_1_view.get_dest_port(),
+        packet_1_view.network_hdr->protocol);
+    conn.set_mss(1571 + 24); // payload is 1571 bytes
+
+    auto res = classifier.classify(packet_1_view);
+    REQUIRE(res == ParseResult::SUCCESS);
+
+    packets.push_back(create_packet(packet_1_view));
+
+    modifier.modify(packets, conn);
+    REQUIRE(packets.size() == 3);
+
+    std::array<char, 1571> zeros{};
+
+    const auto& pkt_1 = packets[0];
+    const auto pkt_1_payload = pkt_1.payload();
+    REQUIRE(std::memcmp(pkt_1_payload.data(), zeros.data(), zeros.size()) == 0);
+
+    const auto& pkt_2 = packets[1];
+    const auto pkt_2_payload = pkt_2.payload();
+    REQUIRE(std::memcmp(pkt_2_payload.data(), zeros.data(), zeros.size()) == 0);
+
+    const auto& pkt_3 = packets[2];
+    const auto pkt_3_payload = pkt_3.payload();
+    REQUIRE(std::memcmp(pkt_3_payload.data(), zeros.data(), zeros.size()) != 0);
 }
