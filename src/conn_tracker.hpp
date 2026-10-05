@@ -27,6 +27,8 @@ public:
 
         // helpers
         std::uint32_t expected_seq;
+
+        int mss{536}; // According to RFC xxxx, TCP Default MSS is 536 bytes (for IPV4)
     };
     struct Udp
     {
@@ -35,6 +37,8 @@ public:
 private:
     std::size_t pl_bytes_transfered_{ 0 };
     std::size_t packet_count_{ 0 };
+
+    mutable std::optional<int> mtu_;
 
     std::chrono::time_point<std::chrono::system_clock> last_packet_time_;
 
@@ -48,20 +52,33 @@ private:
         std::optional<std::uint32_t> expected_seq{ 0 };
     } reasm_;
 
+    std::uint32_t saddr_;
+
     std::uint8_t l4_proto_{};
     std::variant<std::monostate, Tcp, Udp> l4_state_;
 
     bool is_done_{ false };// should this connection be handled later on? FIX: TEMPORARY (hopefully)
 
+
     void track_tcp(const PacketView &packet);
     void track_udp(const PacketView &packet);
 
 public:
+    void set_source_addr(const std::uint32_t saddr)
+    {
+        saddr_ = saddr;
+    }
+    std::uint32_t get_source_addr() const
+    {
+        return saddr_;
+    }
+
     [[nodiscard]] std::uint8_t get_l4_proto() const { return l4_proto_; }
     [[nodiscard]] const Tcp &get_l4_tcp() const { return std::get<1>(l4_state_); }
     [[nodiscard]] const Udp &get_l4_udp() const { return std::get<2>(l4_state_); }
     void set_l4_proto(const std::uint8_t proto);
 
+    int get_mss() const;
 
     bool is_reassembling() const { return reasm_.pos > 0 || reasm_.total_size > 0; }
 

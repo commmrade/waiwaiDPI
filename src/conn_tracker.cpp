@@ -7,7 +7,7 @@
 #include "conn_tracker.hpp"
 #include "consts.hpp"
 #include "nfq.hpp"
-
+#include "iface.hpp"
 #include <cassert>
 #include <linux/netfilter.h>
 #include <netinet/ip.h>
@@ -28,6 +28,32 @@ void Connection::set_l4_proto(const std::uint8_t proto)
     default: {
         throw std::runtime_error("This L4 protocol is not supported");
     }
+    }
+}
+int Connection::get_mss() const
+{
+    const auto proto = get_l4_proto();
+    if (proto == IPPROTO_TCP) {
+        return get_l4_tcp().mss;
+    } else {
+        constexpr auto MTU_DEFAULT = 1500;
+        if (!mtu_.has_value()) {
+            const auto iface_name = iface_find(&saddr_);
+            if (iface_name.has_value()) {
+                const auto mtu = iface_get_mtu(iface_name.value());
+                if (mtu.has_value()) {
+                    mtu_.emplace(mtu.value());
+                } else {
+                    SPDLOG_ERROR("Failed to get MTU for interface {}: {}", iface_name.value(), mtu.error());
+                    mtu_.emplace(MTU_DEFAULT);
+                }
+            } else {
+                SPDLOG_ERROR("Failed to find an interface: {}", iface_name.error());
+                mtu_.emplace(MTU_DEFAULT);
+            }
+        } else {
+            return mtu_.value() - sizeof(iphdr) - sizeof(udphdr);
+        }
     }
 }
 void Connection::reset_reasm()
@@ -55,6 +81,44 @@ void Connection::track_transport(const PacketView &packet)
     }
 }
 
+static std::optional<int> parse_mss_opt(std::span<const char> tcpb)
+{
+    if (tcpb.size() <= sizeof(tcphdr)) {
+        return false; // no TCP options
+    }
+
+    constexpr static std::uint8_t MSS_OPT_KIND = 2;
+    constexpr static std::uint8_t MSS_OPT_SIZE = 4;
+
+    tcpb = tcpb.subspan(sizeof(tcphdr));
+    while (!tcpb.empty()) {
+        if (tcpb.size() < 2) {
+            return false;// not enough bytes to get KIND,LENGTH
+        }
+
+        const std::uint8_t kind = tcpb[0];
+        if (kind == 1) {// no-op
+            tcpb = tcpb.subspan(1);
+            continue;
+        }
+
+        const std::uint8_t size = tcpb[1];
+        if (kind != MSS_OPT_KIND) {
+            if (tcpb.size() < size) { return false; }
+
+            assert(size > 0);
+            tcpb = tcpb.subspan(size);// size includes kind,length + payload
+            continue;
+        }
+
+        if (size < MSS_OPT_SIZE || size > MSS_OPT_SIZE) { return false; }
+
+        return ntohs(*std::start_lifetime_as<std::uint16_t>(std::next(tcpb.data(), 2)));
+    }
+
+    return std::nullopt;
+}
+
 void Connection::track_tcp(const PacketView &packet)
 {
     const tcphdr* tcph = std::get<0>(packet.transport_hdr);
@@ -66,6 +130,20 @@ void Connection::track_tcp(const PacketView &packet)
     // 1. SYN stuff
     // If we see a SYN and then next packet is ACK and SEQ == OLD_SEQ + 1 => connection ESTAB
     // If we see a SYN + ACK => connection ESTAB (really likely)
+
+    if (tcph->syn) {
+        const auto* iph = packet.network_hdr;
+
+        auto tcpb = packet.packet.subspan(iph->ihl * 4);
+        tcpb = tcpb.subspan(0, std::min<std::size_t>(tcpb.size(), tcph->doff * 4));
+
+        const auto mss_opt = parse_mss_opt(tcpb);
+
+        if (mss_opt.has_value()) {
+            tcp_state.mss = mss_opt.value();
+        }
+    }
+
     {
         if (tcp_state.state == Tcp::TcpState::UNKNOWN && (tcph->syn && !tcph->ack)) {
             tcp_state.state = Tcp::TcpState::SYN;
@@ -130,6 +208,7 @@ void ConnTracker::track(const PacketView &packet)
         assert(inserted);
         conn_iter = iter;
         conn_iter->second.set_l4_proto(packet.network_hdr->protocol);
+        conn_iter->second.set_source_addr(packet.network_hdr->saddr);
     }
 
     conn_iter->second.track_transport(packet);

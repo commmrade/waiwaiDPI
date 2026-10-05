@@ -139,6 +139,8 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
                 tcp->check = calc_tcp_checksum(new_packet);
 
                 std::swap(packet, new_packet);
+
+                SPDLOG_DEBUG("MSS Size is : {}", conn.get_mss());
             }
         } else {
             SPDLOG_ERROR("Seqovl is defined but the L4 protocol is not TCP");
