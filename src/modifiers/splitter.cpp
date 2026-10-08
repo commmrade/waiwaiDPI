@@ -113,9 +113,7 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
     }
 
-    if (seqovl_.has_value()) {
-        seqovl(packets, handle_fake, conn);
-    }
+    if (seqovl_.has_value()) { seqovl(packets, handle_fake, conn); }
 
     if (seq_offset_.has_value()) {
         if (conn.get_l4_proto() == IPPROTO_TCP) {
@@ -143,7 +141,8 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
     }
 }
 
-static std::vector<Packet> segmentize(std::span<const char> full_payload, unsigned long mss, const Packet& orig_packet, unsigned start_seq)
+static std::vector<Packet>
+    segmentize(std::span<const char> full_payload, unsigned long mss, const Packet &orig_packet, unsigned start_seq)
 {
     auto packet_view = parse_packet_view(orig_packet);
     std::span<const char> payload{ full_payload };
@@ -159,7 +158,7 @@ static std::vector<Packet> segmentize(std::span<const char> full_payload, unsign
         new_packet.action.action = PacketAction::Action::SEND;
         new_packet.action.packet_id = 0;
 
-        auto* tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
+        auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
         tcp->seq = htonl(start_seq);
         tcp->check = 0;
         tcp->check = calc_tcp_checksum(new_packet);
@@ -180,23 +179,33 @@ static std::vector<Packet> segmentize(std::span<const char> full_payload, unsign
     return splitted;
 }
 
-void Splitter::seqovl(std::vector<Packet>& packets, bool handle_fake, const Connection& conn)
+void Splitter::seqovl(std::vector<Packet> &packets, bool handle_fake, const Connection &conn)
 {
     if (conn.get_l4_proto() == IPPROTO_TCP) {
         auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
             return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
         });
 
-        if (iter == packets.end()) {
-            return;
-        }
+        if (iter == packets.end()) { return; }
 
         auto &packet = *iter;
         const auto packet_view = parse_packet_view(packet);
         const auto packet_pl = packet.payload();
 
         std::vector<char> new_payload(
-            packet.payload().size() + static_cast<std::size_t>(seqovl_.value()), 0);// TODO: set seqovl-pattern
+            packet.payload().size() + static_cast<std::size_t>(seqovl_.value()), 0);
+
+        if (seqovl_pat_.has_value()) {
+            std::span<char> full_payload{new_payload.data(), static_cast<std::size_t>(seqovl_.value())};
+
+            while (!full_payload.empty()) {
+                const auto chunk_size = std::min(seqovl_pat_.value().size(), full_payload.size());
+                auto chunk = full_payload.subspan(0, chunk_size);
+                std::memcpy(chunk.data(), seqovl_pat_.value().data(), chunk_size);
+                full_payload = full_payload.subspan(chunk_size);
+            }
+        }
+
         std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(seqovl_.value())),
             packet_pl.data(),
             packet_pl.size());
@@ -204,49 +213,15 @@ void Splitter::seqovl(std::vector<Packet>& packets, bool handle_fake, const Conn
         auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
         auto *ip = packet.network_hdr();
 
-        const auto mss = static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr))
-                         - (tcp->doff * 4 - sizeof(tcp));
+        const auto mss =
+            static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcp));
 
         if (new_payload.size() > mss) {
-            // std::span<const char> payload{ new_payload };
-            //
-            // std::vector<Packet> splitted;
-            // splitted.reserve((new_payload.size() / mss) + 1);
-            //
-            // auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value());
-            //
-            // while (!payload.empty()) {
-            //     const auto chunk_size = std::min(payload.size(), mss);
-            //
-            //     auto new_packet = create_packet_from(packet_view, payload.subspan(0, chunk_size));
-            //     new_packet.is_fake_blob = packet.is_fake_blob;
-            //     new_packet.action.action = PacketAction::Action::SEND;
-            //     new_packet.action.packet_id = 0;
-            //
-            //     tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
-            //     tcp->seq = htonl(start_seq);
-            //     tcp->check = 0;
-            //     tcp->check = calc_tcp_checksum(new_packet);
-            //
-            //     splitted.push_back(std::move(new_packet));
-            //
-            //     payload = payload.subspan(chunk_size);
-            //     start_seq += chunk_size;
-            // }
-            //
-            // if (packet.action.action == PacketAction::Action::SEND) {
-            //     splitted.front().action.action = PacketAction::Action::SEND;
-            // } else {
-            //     splitted.front().action.action = PacketAction::Action::DROP_AND_SEND;
-            //     splitted.front().action.packet_id = packet.action.packet_id;
-            // }
-
             auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value());
             auto splitted = segmentize(new_payload, mss, packet, start_seq);
 
             iter = packets.erase(iter);
-            packets.insert(
-                iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
+            packets.insert(iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
         } else {
             auto new_packet = create_packet_from(packet_view, new_payload);
             new_packet.is_fake_blob = packet.is_fake_blob;
@@ -257,7 +232,7 @@ void Splitter::seqovl(std::vector<Packet>& packets, bool handle_fake, const Conn
                 new_packet.action.packet_id = packet.action.packet_id;
             }
 
-            auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr()); //NOLINT
+            auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());// NOLINT
             tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value()));
             tcp->check = 0;
             tcp->check = calc_tcp_checksum(new_packet);
@@ -307,6 +282,42 @@ bool Splitter::matches(const std::vector<Packet> &packets, const Connection &con
 {
     if (l7_payload_.has_value()) { return conn.payload_proto() == l7_payload_.value(); }
     return true;
+}
+
+static std::vector<char> parse_blob(const std::string_view &str)
+{
+    if (str.starts_with("0x")) {
+        std::string hex{ str.substr(2) };
+        if (hex.size() % 2 != 0) { hex.insert(hex.begin(), '0'); }
+
+        std::vector<char> bytes;
+        for (unsigned int i = 0; i < hex.length(); i += 2) {
+            const std::string byteString = hex.substr(i, 2);
+            char byte = static_cast<char>(strtol(byteString.c_str(), nullptr, 16));
+            bytes.push_back(byte);
+        }
+
+        return bytes;
+    } else {
+        if (!std::filesystem::exists(str)) {
+            throw std::runtime_error(std::format("Blob at filepath '{}' does not exist", str));
+        }
+
+        auto *fp = std::fopen(str.data(), "rb");
+        if (!fp) { throw std::runtime_error(std::format("Could not open file '{}'", str)); }
+        int ret = std::fseek(fp, 0U, SEEK_END);
+        if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
+        const auto size = std::ftell(fp);
+        if (size < 0) { throw std::runtime_error(std::strerror(errno)); }
+        ret = std::fseek(fp, 0U, SEEK_SET);
+        if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
+        std::vector<char> buf(size, 0);
+        const auto rd = std::fread(buf.data(), 1U, static_cast<std::size_t>(size), fp);
+        if (rd < 0) { throw std::runtime_error(std::strerror(errno)); }
+        ret = std::fclose(fp);
+
+        return buf;
+    }
 }
 
 void Splitter::parse_config(const toml::table *table)
@@ -368,25 +379,7 @@ void Splitter::parse_config(const toml::table *table)
     if (blob_node != nullptr) {
         if (!blob_node->is_string()) { throw std::runtime_error("fake_blob must be a string"); }
 
-        const auto blob_path = blob_node->as_string()->get();
-        if (!std::filesystem::exists(blob_path)) {
-            throw std::runtime_error(std::format("Blob at filepath '{}' does not exist", blob_path));
-        }
-
-        auto *fp = std::fopen(blob_path.c_str(), "rb");
-        if (!fp) { throw std::runtime_error(std::format("Could not open file '{}'", blob_path)); }
-        int ret = std::fseek(fp, 0U, SEEK_END);
-        if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
-        const auto size = std::ftell(fp);
-        if (size < 0) { throw std::runtime_error(std::strerror(errno)); }
-        ret = std::fseek(fp, 0U, SEEK_SET);
-        if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
-        std::vector<char> buf;
-        buf.resize(size);
-        const auto rd = std::fread(buf.data(), 1U, static_cast<std::size_t>(size), fp);
-        if (rd < 0) { throw std::runtime_error(std::strerror(errno)); }
-        ret = std::fclose(fp);
-
+        auto buf = parse_blob(blob_node->as_string()->get());
         fake_blob_.emplace(std::move(buf));
     }
 
@@ -432,5 +425,13 @@ void Splitter::parse_config(const toml::table *table)
         if (!seqovl_node->is_integer()) { throw std::runtime_error("seqovl must be an integer"); }
 
         seqovl_.emplace(seqovl_node->as_integer()->get());
+    }
+
+    const auto *seqovl_ptrn_node = table->get("seqovl_pattern");
+    if (seqovl_ptrn_node != nullptr) {
+        if (!seqovl_ptrn_node->is_string()) { throw std::runtime_error("seqovl_pattern must be a string"); }
+
+        auto buf = parse_blob(seqovl_ptrn_node->as_string()->get());
+        seqovl_pat_.emplace(std::move(buf));
     }
 }

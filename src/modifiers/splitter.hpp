@@ -21,6 +21,7 @@ class Splitter : public IModifier
     std::optional<std::uint8_t> ipv4_ttl_;
     std::optional<L7Proto> l7_payload_;
     std::optional<int> seqovl_;
+    std::optional<std::vector<char>> seqovl_pat_;
 
     bool check_ip(const std::vector<Packet>& packets) const;
     void process(std::vector<Packet>& packets, const bool handle_fake, const Connection& conn);
