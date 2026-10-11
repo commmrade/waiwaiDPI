@@ -249,7 +249,7 @@ std::expected<bool, std::string> split::split(std::vector<Packet>& packets, cons
     case L7Proto::HTTP: {
         return split_http(packets, full_payload, cfg);
     }
-    case L7Proto::TLS_HANDSHAKE: {
+    case L7Proto::TLS: {
         return split_tls(packets, full_payload, cfg);
     }
     default: {

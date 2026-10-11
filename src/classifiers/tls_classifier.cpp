@@ -19,7 +19,7 @@ std::expected<ParseResult, std::string>
         }
 
         conn.set_reasm_total_size(tls_len.value());
-        conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
+        conn.set_payload_proto(L7Proto::TLS);
     }
 
     conn.add_reasm_frag(pkt);
@@ -46,7 +46,7 @@ std::expected<ParseResult, std::string> TlsHandshakeClassifier::classify(const P
         pkt.network_hdr->daddr,
         pkt.get_dest_port(),
         pkt.network_hdr->protocol);
-    if (conn.payload_proto() == L7Proto::TLS_HANDSHAKE && conn.get_reasm_pos() > 0
+    if (conn.payload_proto() == L7Proto::TLS && conn.get_reasm_pos() > 0
         && pkt.get_seq() == conn.get_reasm_expected_seq()) {
         return buffer_pkt(conn, pkt, std::nullopt);
     }
@@ -73,7 +73,7 @@ std::expected<ParseResult, std::string> TlsHandshakeClassifier::classify(const P
         return buffer_pkt(conn, pkt, std::optional{ tls_len + TLS_HDR_LEN });
     }
 
-    conn.set_payload_proto(L7Proto::TLS_HANDSHAKE);
+    conn.set_payload_proto(L7Proto::TLS);
 
     conn.set_done(true);
     return { ParseResult::SUCCESS };
