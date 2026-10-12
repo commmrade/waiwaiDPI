@@ -1,0 +1,90 @@
+//
+// Created by klewy on 10/12/26.
+//
+
+#include "common.hpp"
+#include "../../checksum.hpp"
+#include <cassert>
+
+bool timestamp_val_offset(Packet &packet, const int offset)
+{
+    auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+    std::span<char> tcp_bytes{ static_cast<char *>(packet.transport_hdr()), static_cast<std::size_t>(tcp->doff * 4) };
+    if (tcp_bytes.size() <= sizeof(tcphdr)) {
+        return false;// no TCP options
+    }
+
+    constexpr static std::uint8_t TS_OPT_KIND = 8;
+    constexpr static std::uint8_t TS_OPT_SIZE = 10;
+
+    tcp_bytes = tcp_bytes.subspan(sizeof(tcphdr));
+    while (!tcp_bytes.empty()) {
+        if (tcp_bytes.size() < 2) {
+            return false;// not enough bytes to get KIND,LENGTH
+        }
+
+        const std::uint8_t kind = tcp_bytes[0];
+        if (kind == 1) {// no-op
+            tcp_bytes = tcp_bytes.subspan(1);
+            continue;
+        }
+
+        const std::uint8_t size = tcp_bytes[1];
+        if (kind != TS_OPT_KIND) {
+            if (tcp_bytes.size() < size) { return false; }
+
+            assert(size > 0);
+            tcp_bytes = tcp_bytes.subspan(size);// size includes kind,length + payload
+            continue;
+        }
+
+        if (size < TS_OPT_SIZE || size > TS_OPT_SIZE) { return false; }
+
+        auto *tv = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2));
+        auto *tr = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2 + sizeof(*tv)));
+
+        *tv = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tv)) + offset));
+        *tr = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tr)) + offset));
+
+        break;
+    }
+
+    return true;
+}
+std::vector<Packet>
+    segmentize(std::span<const char> full_payload, unsigned long mss, const Packet &orig_packet, unsigned start_seq)
+{
+    auto packet_view = parse_packet_view(orig_packet);
+    std::span<const char> payload{ full_payload };
+
+    std::vector<Packet> splitted;
+    splitted.reserve((full_payload.size() / mss) + 1);
+
+    while (!payload.empty()) {
+        const auto chunk_size = std::min<std::size_t>(payload.size(), mss);
+
+        auto new_packet = create_packet_from(packet_view, payload.subspan(0, chunk_size));
+        new_packet.is_fake_blob = orig_packet.is_fake_blob;
+        new_packet.action.action = PacketAction::Action::SEND;
+        new_packet.action.packet_id = 0;
+
+        auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
+        tcp->seq = htonl(start_seq);
+        tcp->check = 0;
+        tcp->check = calc_tcp_checksum(new_packet);
+
+        splitted.push_back(std::move(new_packet));
+
+        payload = payload.subspan(chunk_size);
+        start_seq += chunk_size;
+    }
+
+    if (orig_packet.action.action == PacketAction::Action::SEND) {
+        splitted.front().action.action = PacketAction::Action::SEND;
+    } else {
+        splitted.front().action.action = PacketAction::Action::DROP_AND_SEND;
+        splitted.front().action.packet_id = orig_packet.action.packet_id;
+    }
+
+    return splitted;
+}

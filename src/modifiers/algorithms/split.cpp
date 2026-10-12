@@ -11,15 +11,16 @@
 #include <spdlog/spdlog.h>
 
 namespace helpers {
-static std::size_t do_operation(const std::size_t start, const Split::Operation oper, const std::size_t offset)
+
+std::size_t do_operation(const std::size_t start, const Position::Operation oper, const std::size_t offset)
 {
     std::size_t ret = start;
     switch (oper) {
-    case Split::Operation::Add: {
+    case Position::Operation::Add: {
         ret += offset;
         break;
     }
-    case Split::Operation::Subtract: {
+    case Position::Operation::Subtract: {
         ret -= offset;
         break;
     }
@@ -29,6 +30,7 @@ static std::size_t do_operation(const std::size_t start, const Split::Operation 
 
     return ret;
 };
+
 
 static std::pair<std::vector<Packet>::iterator, std::size_t> find_packet_by_offset(std::vector<Packet> &packets,
     const std::size_t split_pos, bool handle_fake)
@@ -52,20 +54,12 @@ static std::pair<std::vector<Packet>::iterator, std::size_t> find_packet_by_offs
     return { iter.base(), split_pos_relative_to_packet };
 }
 
-// <new span, success>
-static bool safe_subspan(std::span<const char> &span, const std::size_t offset)
-{
-    if (span.size() < offset) { return false; }
-    span = span.subspan(offset);
-    return true;
-}
-
 static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span<const char> payload)
 {
-    // It is guaranteed to be a TLS handshake (because of the classifier), nothing else is guaranteed besides that
-    constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
+    // it is guaranteed to be a tls handshake (because of the classifier), nothing else is guaranteed besides that
+    constexpr auto tls_handshake_type = 0x16;
     assert(payload.size() >= 5);
-    assert(payload[0] == TLS_HANDSHAKE_TYPE);
+    assert(payload[0] == tls_handshake_type);
     assert(payload[1] == 0x03 && (payload[2] == 0x03 || payload[2] == 0x01));
 
     const auto initial = payload;
@@ -73,40 +67,40 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
     // content stuff
     payload = payload.subspan(5);// skip header bytes, get to content
 
-    // From now on I need to do all the checks, because Classifier checks just the header (first 5 bytes)
-    if (payload[0] != 0x01) {// content type is not ClientHello
-        // std::println(std::cerr, "Content type is not ClientHello");
+    // from now on i need to do all the checks, because classifier checks just the header (first 5 bytes)
+    if (payload[0] != 0x01) {// content type is not clienthello
+        // std::println(std::cerr, "content type is not clienthello");
         return std::nullopt;
     }
 
-    if (!safe_subspan(payload, 38)) {// skip type(1) + length(3) + legacyVersion(2) + random(32) fields
-        std::println(std::cerr, "Ill-formed TLS");
+    if (!safe_subspan(payload, 38)) {// skip type(1) + length(3) + legacyversion(2) + random(32) fields
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
 
     const auto legacy_session_id_len = static_cast<std::uint8_t>(payload[0]);
     if (!safe_subspan(payload, sizeof(legacy_session_id_len) + legacy_session_id_len)) {
-        std::println(std::cerr, "Ill-formed TLS");
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
 
     std::uint16_t cipher_suites_len = 0;
     if (payload.size() < sizeof(cipher_suites_len)) {
-        std::println(std::cerr, "Ill-formed TLS");
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
     std::memcpy(&cipher_suites_len, payload.data(), sizeof(cipher_suites_len));
     cipher_suites_len = ntohs(cipher_suites_len);
 
     if (!safe_subspan(payload, sizeof(cipher_suites_len) + cipher_suites_len + 2)) {
-        std::println(std::cerr, "Ill-formed TLS");
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
 
     // parse extensions (sni is here) (loop)
     std::uint16_t exts_len = 0;
     if (payload.size() < sizeof(exts_len)) {
-        std::println(std::cerr, "Ill-formed TLS");
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
     std::memcpy(&exts_len, payload.data(), sizeof(exts_len));
@@ -116,7 +110,7 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
     while (!payload.empty()) {
         std::uint16_t ext_type = 0;
         if (payload.size() < sizeof(ext_type)) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
 
@@ -128,17 +122,17 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
 
         std::uint16_t ext_len = 0;
         if (payload.size() < sizeof(ext_len)) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
         std::memcpy(&ext_len, payload.data(), sizeof(ext_len));
         ext_len = ntohs(ext_len);
 
-        constexpr auto EXT_SNI_TYPE = 0x00;
-        if (ext_type != EXT_SNI_TYPE) {
+        constexpr auto ext_sni_type = 0x00;
+        if (ext_type != ext_sni_type) {
 
             if (!safe_subspan(payload, sizeof(ext_len) + ext_len)) {
-                std::println(std::cerr, "Ill-formed TLS");
+                std::println(std::cerr, "ill-formed tls");
                 return std::nullopt;
             }
             continue;
@@ -148,13 +142,13 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
 
         std::uint16_t serv_name_list_len = 0;
         if (payload.size() < sizeof(serv_name_list_len) + 1) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
         std::memcpy(&serv_name_list_len, payload.data(), sizeof(serv_name_list_len));
         serv_name_list_len = ntohs(serv_name_list_len);
 
-        if (payload[2] != 0x00) {// well acyually servname list is a list, but it is ALWAYS 1 element so idc
+        if (payload[2] != 0x00) {// well acyually servname list is a list, but it is always 1 element so idc
             return std::nullopt;
         }
 
@@ -162,14 +156,14 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
 
         std::uint16_t hostname_len = 0;
         if (payload.size() < sizeof(hostname_len)) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
         std::memcpy(&hostname_len, payload.data(), sizeof(hostname_len));
         hostname_len = ntohs(hostname_len);
 
         if (payload.size() < sizeof(hostname_len) + hostname_len) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
 

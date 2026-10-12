@@ -27,13 +27,18 @@ add_executable(main main.cpp
         profile.hpp
         iptables.cpp
         iptables.hpp
-        modifiers/split.hpp
+        modifiers/args.hpp
         modifiers/splitter.cpp
         modifiers/splitter.hpp
         modifiers/algorithms/split.cpp
         modifiers/algorithms/split.hpp
         iface.hpp
         iface.cpp
+        modifiers/disorder.cpp
+        modifiers/disorder.hpp
+        modifiers/args.cpp
+        modifiers/algorithms/common.cpp
+        modifiers/algorithms/common.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})

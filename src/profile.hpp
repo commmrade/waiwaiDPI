@@ -6,6 +6,7 @@
 #define WAIWAIDPI_PROFILE_HPP
 #include "classifier.hpp"
 #include "iptables.hpp"
+#include "modifiers/disorder.hpp"
 #include "modifiers/modifier.hpp"
 #include "modifiers/splitter.hpp"
 
@@ -45,13 +46,18 @@ inline std::unique_ptr<PayloadClassifier> create_classifier(const std::string_vi
 
 inline std::unique_ptr<IModifier> create_modifier(const std::string_view name, const toml::table* table)
 {
+    std::unique_ptr<IModifier> ret;
+
     if (name == Splitter::name()) {
-        auto ret = std::make_unique<Splitter>();
-        ret->parse_config(table);
-        return ret;
+        ret = std::make_unique<Splitter>();
+    } else if (name == Disorder::name()) {
+        ret = std::make_unique<Disorder>();
     } else {
         throw std::runtime_error(std::format("Unknown modifier name: '{}'", name));
     }
+
+    ret->parse_config(table);
+    return ret;
 }
 
 inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> build_profiles(const std::string_view cfg_path, ConnTracker& tracker, const std::uint32_t queue_number)
@@ -120,7 +126,6 @@ inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> bui
                 throw std::runtime_error(std::format("Classifier name is not defined in profile '{}'", profile.first.str()));
             }
 
-            // TODO: Build modifier
             auto mdf = create_modifier(name_opt.value(), modifier_tbl);
             iter->second.modifier.add(std::move(mdf));
         }
