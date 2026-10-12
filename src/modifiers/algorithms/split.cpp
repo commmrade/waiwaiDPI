@@ -196,8 +196,7 @@ static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
 
     auto *tcp = static_cast<tcphdr *>(second.transport_hdr());
     tcp->seq = htonl(ntohl(tcp->seq) + static_cast<std::uint32_t>(split_pos_relative_to_packet));
-    tcp->check = 0;
-    tcp->check = calc_tcp_checksum(second);
+    calc_packet_checksum(second);
 
     // First packet
     // ACCEPT -> DROP_AND_SEND
@@ -210,8 +209,7 @@ static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
     auto *ip = pkt.network_hdr();
 
     ip->tot_len = htons((ip->ihl * 4) + (tcp->doff * 4) + static_cast<std::uint16_t>(pkt.payload().size()));
-    tcp->check = 0;
-    tcp->check = calc_tcp_checksum(pkt);
+    calc_packet_checksum(pkt);
 
     packets.insert(iter + 1, std::move(second));
 }

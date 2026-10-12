@@ -70,8 +70,7 @@ std::vector<Packet>
 
         auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
         tcp->seq = htonl(start_seq);
-        tcp->check = 0;
-        tcp->check = calc_tcp_checksum(new_packet);
+        calc_packet_checksum(new_packet);
 
         splitted.push_back(std::move(new_packet));
 

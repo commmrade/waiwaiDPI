@@ -59,8 +59,7 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
                 if (!timestamp_val_offset(packet, args_.ts_offset.value())) { SPDLOG_WARN("Failed to offset timestamp"); }
 
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                tcp->check = 0;
-                tcp->check = calc_tcp_checksum(packet);
+                calc_packet_checksum(packet);
             }
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
@@ -74,8 +73,7 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
             for (auto &packet : filtered_packets) {
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
                 tcp->seq = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + args_.seq_offset.value()));
-                tcp->check = 0;
-                tcp->check = calc_tcp_checksum(packet);
+                calc_packet_checksum(packet);
             }
         } else {
             SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
@@ -150,8 +148,7 @@ void Splitter::seqovl(std::vector<Packet> &packets, bool handle_fake, const Conn
 
             auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());// NOLINT
             tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value()));
-            tcp->check = 0;
-            tcp->check = calc_tcp_checksum(new_packet);
+            calc_packet_checksum(new_packet);
 
             std::swap(packet, new_packet);
         }
@@ -174,16 +171,9 @@ void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
         std::vector<Packet> blob_packets;
         blob_packets.push_back(std::move(new_packet));
         blob_packets.front().is_fake_blob = true;
+        calc_packet_checksum(blob_packets.front());
 
         process(blob_packets, true, conn);
-
-        if (!args_.badcksum) {
-            for (auto &packet : blob_packets) {
-                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                tcp->check = 0;
-                tcp->check = calc_tcp_checksum(packet);
-            }
-        }
 
         for (auto &packet : blob_packets) { packet.is_fake_blob = true; }
 

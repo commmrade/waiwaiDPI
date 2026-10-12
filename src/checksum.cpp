@@ -6,6 +6,18 @@
 
 #include <cstring>
 
+
+void calc_packet_checksum(Packet &pkt)
+{
+    if (pkt.network_hdr()->protocol == IPPROTO_TCP) {
+        auto* tcp = static_cast<tcphdr*>(pkt.transport_hdr());
+        tcp->check = 0;
+        tcp->check = calc_tcp_checksum(pkt);
+    } else {
+        throw std::logic_error("UDP checksums aren't implemented yet");
+    }
+}
+
 std::uint16_t calc_tcp_checksum(const Packet &pkt)
 {
     struct pseudo_hdr
