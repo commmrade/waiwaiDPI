@@ -56,7 +56,9 @@ add_executable(tests
         ../src/modifiers/disorder.cpp
         ../src/modifiers/algorithms/split.cpp
         ../src/nfq.cpp
+        ../src/modifiers/args.cpp
         tcp_state_tests.cpp
+        ../src/modifiers/algorithms/common.cpp
         splitter_general_tests.cpp
         ../src/iface.cpp
         splitter_tls_tests.cpp
