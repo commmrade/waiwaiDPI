@@ -192,3 +192,42 @@ TEST_CASE_METHOD(DisorderTestFixture, "Fake blob is not reversed", "[disorder_mo
 
     REQUIRE(std::memcmp(blob.data(), front_payload.data(), std::min(blob.size(), front_payload.size())) == 0);
 }
+
+TEST_CASE_METHOD(DisorderTestFixture, "Host check works on original data, not fake", "[disorder_modifier]")
+{
+    constexpr std::string_view config = R"toml(
+    [profile.1]
+    port = 443
+    protocol = "tcp"
+
+    [[profile.1.classifiers]]
+    name = "tls_handshake_classifier"
+
+    [[profile.1.modifiers]]
+    name = "disorder"
+    fake_blob = "/home/klewy/Downloads/tls_clienthello_www_google_com.bin"
+
+    [[profile.1.modifiers]]
+    name = "disorder"
+    allowed_hosts = ["xiaaosi.xyz"]
+    split_at = ["hoststart"]
+    )toml";
+    build_disorder(config);
+
+    std::vector<Packet> packets;
+    PacketView packet_1_view = parse_packet_view(bytes_span);
+    tracker.track(packet_1_view);
+    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
+        packet_1_view.get_source_port(),
+        packet_1_view.network_hdr->daddr,
+        packet_1_view.get_dest_port(),
+        packet_1_view.network_hdr->protocol);
+    conn.set_mss(1800);
+    auto res = classifier.classify(packet_1_view);
+    REQUIRE(res == ParseResult::SUCCESS);
+
+    packets.push_back(create_packet(packet_1_view));
+
+    modifier.modify(packets, conn);
+    REQUIRE(packets.size() == 3);
+}

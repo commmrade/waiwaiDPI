@@ -17,7 +17,6 @@ namespace split {
     struct SplitConfig
     {
         const Position& pos;
-        const std::optional<std::unordered_set<std::string>>& hosts;
         bool handle_fake;
     };
 

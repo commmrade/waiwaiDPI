@@ -3,7 +3,9 @@
 //
 
 #include "split.hpp"
+
 #include "../../checksum.hpp"
+#include "../markers.hpp"
 #include <cstring>
 #include <iostream>
 #include <print>
@@ -252,40 +254,32 @@ std::expected<bool, std::string> split::split(std::vector<Packet>& packets, cons
 
 std::expected<bool, std::string> split::split_http(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
 {
-    const std::string_view payload_str{ full_payload };
-
-    constexpr std::string_view HOST_HEADER_NAME = "Host:";
-    const auto host_subrange = std::ranges::search(payload_str, HOST_HEADER_NAME, [](const auto ch1, const auto ch2) {
-        return std::tolower(ch1) == std::tolower(ch2);
-    });
-    if (host_subrange.empty()) {
-        SPDLOG_WARN("Did not find 'Host' in HTTP headers");
-        return {false};
+    const auto markers_res = find_markers(full_payload, L7Proto::HTTP);
+    if (!markers_res.has_value()) {
+        return std::unexpected{"Could not parse markers"};
     }
-    const auto host_pos = std::distance(payload_str.begin(), host_subrange.begin());
-    const auto host_end = payload_str.find("\r\n", static_cast<std::size_t>(host_pos));
-    if (host_end == std::string::npos) {
-        return std::unexpected{"Did not find 'Host' header in HTTP headers"};
-    }
-
-    std::string_view const host{ payload_str.data() + host_pos + HOST_HEADER_NAME.size() + 1,
-        payload_str.data() + host_end };
-    if (cfg.hosts.has_value() && !cfg.hosts.value().contains(std::string{ host })) {
-        SPDLOG_INFO("Host {} is not in allowed hosts list, skip", host);
-        return {false};
-    }
+    const auto& marks = markers_res.value();
 
     std::size_t split_pos = 0;
 
     if (cfg.pos.arg == "hoststart") {
-        const auto offset = helpers::do_operation(0, cfg.pos.operation, cfg.pos.offset);
-        split_pos = static_cast<std::size_t>(host_pos) + HOST_HEADER_NAME.size() + 1 + offset;
+        if (!marks.hoststart.has_value()) {
+            return std::unexpected{"Could not find 'hoststart'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hoststart.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "hostend") {
-        const auto offset = helpers::do_operation(host.size(), cfg.pos.operation, cfg.pos.offset);
-        split_pos = static_cast<std::size_t>(host_pos) + HOST_HEADER_NAME.size() + 1 + offset;
+        if (!marks.hostend.has_value()) {
+            return std::unexpected{"Could not find 'hostend'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hostend.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "hostmid") {
-        const auto offset = helpers::do_operation(host.size() / 2, cfg.pos.operation, cfg.pos.offset);
-        split_pos = static_cast<std::size_t>(host_pos) + HOST_HEADER_NAME.size() + 1 + offset;
+        if (!marks.hostmid.has_value()) {
+            return std::unexpected{"Could not find 'hostmid'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hostmid.value(), cfg.pos.operation, cfg.pos.offset);
     } else {
         const auto offset = cfg.pos.offset;
         split_pos = offset;
@@ -304,34 +298,37 @@ std::expected<bool, std::string> split::split_http(std::vector<Packet>& packets,
 
 std::expected<bool, std::string> split::split_tls(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
 {
-    const auto sni_opt = helpers::get_sni(full_payload);
-    if (!sni_opt.has_value()) {
-        SPDLOG_WARN("SNI Extension was not found in this handshake");
-        return {false};
+    const auto markers_res = find_markers(full_payload, L7Proto::TLS);
+    if (!markers_res.has_value()) {
+        return std::unexpected{"Could not parse markers"};
     }
-
-    const auto &[sni_str, sniext_offset] = sni_opt.value();
-    if (cfg.hosts.has_value() && !cfg.hosts.value().contains(std::string{ sni_str.data() })) {
-        SPDLOG_INFO("Host {} is not in allowed hosts list, skip", sni_str);
-        return {false};
-    }
-
-    const auto sni_str_pos =
-        static_cast<std::size_t>(std::distance(static_cast<const char *>(full_payload.data()), sni_str.data()));
+    const auto& marks = markers_res.value();
 
     std::size_t split_pos = 0;
-
     if (cfg.pos.arg == "hoststart") {
-        const auto offset = helpers::do_operation(0, cfg.pos.operation, cfg.pos.offset);
-        split_pos = sni_str_pos + offset;
+        if (!marks.hoststart.has_value()) {
+            return std::unexpected{"Could not find 'hoststart'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hoststart.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "hostend") {
-        const auto offset = helpers::do_operation(sni_str.size(), cfg.pos.operation, cfg.pos.offset);
-        split_pos = sni_str_pos + offset;
+        if (!marks.hostend.has_value()) {
+            return std::unexpected{"Could not find 'hostend'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hostend.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "hostmid") {
-        const auto offset = helpers::do_operation(sni_str.size() / 2, cfg.pos.operation, cfg.pos.offset);
-        split_pos = sni_str_pos + offset;
+        if (!marks.hostmid.has_value()) {
+            return std::unexpected{"Could not find 'hostmid'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hostmid.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "sniext") {
-        split_pos = helpers::do_operation(sniext_offset, cfg.pos.operation, cfg.pos.offset);
+        if (!marks.sniext.has_value()) {
+            return std::unexpected{"Could not find 'sniext'"};
+        }
+
+        split_pos = helpers::do_operation(marks.sniext.value(), cfg.pos.operation, cfg.pos.offset);
     } else {
         const auto offset = cfg.pos.offset;
         split_pos = offset;

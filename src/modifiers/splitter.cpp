@@ -4,9 +4,11 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "splitter.hpp"
+
 #include "../checksum.hpp"
 #include "algorithms/common.hpp"
 #include "algorithms/split.hpp"
+#include "markers.hpp"
 #include "spdlog/spdlog.h"
 #include <arpa/inet.h>
 #include <filesystem>
@@ -23,6 +25,35 @@ bool Splitter::check_ip(const std::vector<Packet> &packets) const
 
     return true;
 }
+bool Splitter::check_host(const std::vector<Packet> &packets, const Connection &conn) const
+{
+    if (!args_.allowed_hosts.has_value()) { return true; }
+
+    std::vector<char> full_payload;
+
+    for (const auto &pkt : packets) {
+        if (pkt.is_fake_blob) {
+            continue; // we really don't care what the domains are in fake blobs
+        }
+
+        const auto payload = pkt.payload();
+        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
+    }
+
+    const auto markers_res = find_markers(full_payload, conn.payload_proto());
+    if (!markers_res.has_value()) {
+        return false;// that means this is some kind malformed request and idc
+    }
+
+    const auto &marks = markers_res.value();
+    if (!marks.hoststart.has_value() || !marks.hostend.has_value()) {
+        return false;// malformed request, how does this even happen
+    }
+
+    const std::string_view host{ std::next(full_payload.data(), static_cast<std::ptrdiff_t>(marks.hoststart.value())),
+        marks.hostend.value() - marks.hoststart.value() };
+    return args_.allowed_hosts.value().contains(std::string{ host });
+}
 
 void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, const Connection &conn)
 {
@@ -38,10 +69,8 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
 
         for (const auto &split_pos : args_.splits) {
-            auto res = split::split(packets,
-                split::SplitConfig{ .pos = split_pos, .hosts = args_.allowed_hosts, .handle_fake = handle_fake },
-                full_payload,
-                conn);
+            auto res = split::split(
+                packets, split::SplitConfig{ .pos = split_pos, .handle_fake = handle_fake }, full_payload, conn);
             if (!res) {
                 SPDLOG_WARN(
                     "Wasn't able to split packet at {}:{}, because: {}", split_pos.arg, split_pos.offset, res.error());
@@ -56,7 +85,9 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
     if (args_.ts_offset.has_value()) {
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             for (auto &packet : filtered_packets) {
-                if (!timestamp_val_offset(packet, args_.ts_offset.value())) { SPDLOG_WARN("Failed to offset timestamp"); }
+                if (!timestamp_val_offset(packet, args_.ts_offset.value())) {
+                    SPDLOG_WARN("Failed to offset timestamp");
+                }
 
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
                 calc_packet_checksum(packet);
@@ -66,13 +97,20 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
     }
 
-    if (args_.seqovl.has_value()) { seqovl(packets, handle_fake, conn); }
+    if (args_.seqovl.has_value()) {
+        if (conn.get_l4_proto() == IPPROTO_TCP) {
+            seqovl(packets, handle_fake, conn);
+        } else {
+            SPDLOG_WARN("Seqovl is defined but the protocol is not TCP");
+        }
+    }
 
     if (args_.seq_offset.has_value()) {
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             for (auto &packet : filtered_packets) {
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                tcp->seq = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + args_.seq_offset.value()));
+                tcp->seq =
+                    htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + args_.seq_offset.value()));
                 calc_packet_checksum(packet);
             }
         } else {
@@ -95,71 +133,67 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
 
 void Splitter::seqovl(std::vector<Packet> &packets, bool handle_fake, const Connection &conn)
 {
-    if (conn.get_l4_proto() == IPPROTO_TCP) {
-        auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
-            return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
-        });
+    auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
+        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+    });
 
-        if (iter == packets.end()) { return; }
+    if (iter == packets.end()) { return; }
 
-        auto &packet = *iter;
-        const auto packet_view = parse_packet_view(packet);
-        const auto packet_pl = packet.payload();
+    auto &packet = *iter;
+    const auto packet_view = parse_packet_view(packet);
+    const auto packet_pl = packet.payload();
 
-        std::vector<char> new_payload(
-            packet.payload().size() + static_cast<std::size_t>(args_.seqovl.value()), 0);
+    std::vector<char> new_payload(packet.payload().size() + static_cast<std::size_t>(args_.seqovl.value()), 0);
 
-        if (args_.seqovl_pat.has_value()) {
-            std::span<char> full_payload{new_payload.data(), static_cast<std::size_t>(args_.seqovl.value())};
+    if (args_.seqovl_pat.has_value()) {
+        std::span<char> full_payload{ new_payload.data(), static_cast<std::size_t>(args_.seqovl.value()) };
 
-            while (!full_payload.empty()) {
-                const auto chunk_size = std::min(args_.seqovl_pat.value().size(), full_payload.size());
-                auto chunk = full_payload.subspan(0, chunk_size);
-                std::memcpy(chunk.data(), args_.seqovl_pat.value().data(), chunk_size);
-                full_payload = full_payload.subspan(chunk_size);
-            }
+        while (!full_payload.empty()) {
+            const auto chunk_size = std::min(args_.seqovl_pat.value().size(), full_payload.size());
+            auto chunk = full_payload.subspan(0, chunk_size);
+            std::memcpy(chunk.data(), args_.seqovl_pat.value().data(), chunk_size);
+            full_payload = full_payload.subspan(chunk_size);
         }
+    }
 
-        std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(args_.seqovl.value())),
-            packet_pl.data(),
-            packet_pl.size());
+    std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(args_.seqovl.value())),
+        packet_pl.data(),
+        packet_pl.size());
 
-        auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-        auto *ip = packet.network_hdr();
+    auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+    auto *ip = packet.network_hdr();
 
-        const auto mss =
-            static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcp));
+    const auto mss =
+        static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcp));
 
-        if (new_payload.size() > mss) {
-            auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value());
-            auto splitted = segmentize(new_payload, mss, packet, start_seq);
+    if (new_payload.size() > mss) {
+        auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value());
+        auto splitted = segmentize(new_payload, mss, packet, start_seq);
 
-            iter = packets.erase(iter);
-            packets.insert(iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
-        } else {
-            auto new_packet = create_packet_from(packet_view, new_payload);
-            new_packet.is_fake_blob = packet.is_fake_blob;
-            if (packet.action.action == PacketAction::Action::SEND) {
-                new_packet.action.action = PacketAction::Action::SEND;
-            } else {
-                new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
-                new_packet.action.packet_id = packet.action.packet_id;
-            }
-
-            auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());// NOLINT
-            tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value()));
-            calc_packet_checksum(new_packet);
-
-            std::swap(packet, new_packet);
-        }
+        iter = packets.erase(iter);
+        packets.insert(iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
     } else {
-        SPDLOG_ERROR("Seqovl is defined but the L4 protocol is not TCP");
+        auto new_packet = create_packet_from(packet_view, new_payload);
+        new_packet.is_fake_blob = packet.is_fake_blob;
+        if (packet.action.action == PacketAction::Action::SEND) {
+            new_packet.action.action = PacketAction::Action::SEND;
+        } else {
+            new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
+            new_packet.action.packet_id = packet.action.packet_id;
+        }
+
+        auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());// NOLINT
+        tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value()));
+        calc_packet_checksum(new_packet);
+
+        std::swap(packet, new_packet);
     }
 }
 
 void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
 {
     if (!check_ip(vec)) { return; }
+    if (!check_host(vec, conn)) { return; }
 
     if (args_.fake_blob.has_value()) {
         const auto front_view = parse_packet_view(vec.front());

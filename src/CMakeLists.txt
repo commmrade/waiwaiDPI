@@ -39,6 +39,8 @@ add_executable(main main.cpp
         modifiers/args.cpp
         modifiers/algorithms/common.cpp
         modifiers/algorithms/common.hpp
+        modifiers/markers.cpp
+        modifiers/markers.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})

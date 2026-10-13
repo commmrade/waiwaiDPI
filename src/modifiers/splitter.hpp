@@ -27,6 +27,7 @@ class Splitter : public IModifier
     } args_;
 
     bool check_ip(const std::vector<Packet>& packets) const;
+    bool check_host(const std::vector<Packet>& packets, const Connection& conn) const;
     void process(std::vector<Packet>& packets, const bool handle_fake, const Connection& conn);
 
     void seqovl(std::vector<Packet>& packets, bool handle_fake, const Connection& conn);
