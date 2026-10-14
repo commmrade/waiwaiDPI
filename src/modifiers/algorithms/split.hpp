@@ -6,7 +6,7 @@
 #define WAIWAIDPI_SPLIT_HPP
 #include "../../conn_tracker.hpp"
 #include "../../packet_view.hpp"
-#include "../split.hpp"
+#include "../args.hpp"
 
 
 #include <expected>
@@ -16,8 +16,7 @@
 namespace split {
     struct SplitConfig
     {
-        const Split& pos;
-        const std::optional<std::unordered_set<std::string>>& hosts;
+        const Position& pos;
         bool handle_fake;
     };
 
@@ -27,6 +26,19 @@ namespace split {
     std::expected<bool, std::string> split_http(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
     std::expected<bool, std::string> split_tls(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
     std::expected<bool, std::string> split_other(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg);
+}
+
+namespace helpers {
+std::size_t do_operation(const std::size_t start, const Position::Operation oper, const std::size_t offset);
+
+template<typename T>
+static bool safe_subspan(std::span<const T> &span, const std::size_t offset)
+{
+    if (span.size() < offset) { return false; }
+    span = span.subspan(offset);
+    return true;
+}
+
 }
 
 #endif// WAIWAIDPI_SPLIT_HPP

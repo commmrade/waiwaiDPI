@@ -53,14 +53,20 @@ add_executable(tests
         ../src/checksum.cpp
         ../src/modifiers/modifier.cpp
         ../src/modifiers/splitter.cpp
+        ../src/modifiers/disorder.cpp
         ../src/modifiers/algorithms/split.cpp
         ../src/nfq.cpp
+        ../src/modifiers/args.cpp
         tcp_state_tests.cpp
+        ../src/modifiers/algorithms/common.cpp
+        ../src/modifiers/markers.cpp
         splitter_general_tests.cpp
         ../src/iface.cpp
         splitter_tls_tests.cpp
         splitter_common.hpp
         splitter_http_tests.cpp
+        disorder_general_tests.cpp
+        disorder_common.hpp
 )
 target_link_libraries(
   tests

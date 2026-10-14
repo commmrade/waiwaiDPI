@@ -501,3 +501,42 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl segmentation", "[splitter_modifier
     const auto pkt_3_payload = pkt_3.payload();
     REQUIRE(std::memcmp(pkt_3_payload.data(), zeros.data(), zeros.size()) != 0);
 }
+
+TEST_CASE_METHOD(SplitterTestFixture, "Host check works on original data, not fake", "[splitter_modifier]")
+{
+    constexpr std::string_view config = R"toml(
+    [profile.1]
+    port = 443
+    protocol = "tcp"
+
+    [[profile.1.classifiers]]
+    name = "tls_handshake_classifier"
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    fake_blob = "/home/klewy/Downloads/tls_clienthello_www_google_com.bin"
+
+    [[profile.1.modifiers]]
+    name = "splitter"
+    allowed_hosts = ["xiaaosi.xyz"]
+    split_at = ["hoststart"]
+    )toml";
+    build_tls_splitter(config);
+
+    std::vector<Packet> packets;
+    PacketView packet_1_view = parse_packet_view(bytes_span);
+    tracker.track(packet_1_view);
+    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
+        packet_1_view.get_source_port(),
+        packet_1_view.network_hdr->daddr,
+        packet_1_view.get_dest_port(),
+        packet_1_view.network_hdr->protocol);
+    conn.set_mss(1800);
+    auto res = classifier.classify(packet_1_view);
+    REQUIRE(res == ParseResult::SUCCESS);
+
+    packets.push_back(create_packet(packet_1_view));
+
+    modifier.modify(packets, conn);
+    REQUIRE(packets.size() == 3);
+}

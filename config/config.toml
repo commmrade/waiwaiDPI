@@ -10,7 +10,7 @@ name = "splitter"
 split_at = ["2", "hoststart+1"]
 allowed_hosts = ["soundcloud.com", "github.com", "patriotvepen.me", "vk.com", "www.google.com", "linkedin.com"]
 fake_blob = "/home/klewy/Downloads/tls_clienthello_www_google_com.bin"
-ts_off = -10000
+ts_off = -1000
 
 [[profile.2.modifiers]]
 name = "splitter"

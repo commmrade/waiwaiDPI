@@ -1,0 +1,23 @@
+[profile.2]
+port = 443
+protocol = "tcp"
+
+[[profile.2.classifiers]]
+name = "tls_handshake_classifier"
+
+[[profile.2.classifiers]]
+name = "http_classifier"
+
+[[profile.2.modifiers]]
+name = "splitter"
+l7_payload = "tls_handshake"
+split_at = ["2", "hoststart+1"]
+allowed_hosts = ["soundcloud.com", "github.com", "vk.com", "www.google.com", "linkedin.com"]
+fake_blob = "path.bin"
+ts_off = -10000
+
+[[profile.2.modifiers]]
+name = "splitter"
+l7_payload = "tls_handshake"
+split_at = ["2", "hoststart+1"]
+allowed_hosts = ["soundcloud.com", "github.com", "vk.com", "linkedin.com"]

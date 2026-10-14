@@ -13,18 +13,18 @@ enum class L7Proto
     EMPTY,
     // REASSEMBLING, // In this case payload isn't assembled and packets should be held, packets can't be modified
     HTTP,
-    TLS_HANDSHAKE,
-    QUIC_INITIAL
+    TLS,
+    QUIC
 };
 
 inline L7Proto string_to_proto(const std::string_view str)
 {
-    if (str == "tls_handshake") {
-        return L7Proto::TLS_HANDSHAKE;
+    if (str == "tls") {
+        return L7Proto::TLS;
     } else if (str == "http") {
         return L7Proto::HTTP;
     } else if (str == "quic_initial") {
-        return L7Proto::QUIC_INITIAL;
+        return L7Proto::QUIC;
     } else if (str == "empty") {
         return L7Proto::EMPTY;
     } else if (str == "unknown") {

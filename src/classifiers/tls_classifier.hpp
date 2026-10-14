@@ -14,7 +14,7 @@ class TlsHandshakeClassifier final : public PayloadClassifier
     std::expected<ParseResult, std::string> buffer_pkt(Connection& conn, const PacketView& pkt, std::optional<std::size_t> tls_len);
 public:
     std::expected<ParseResult, std::string> classify(const PacketView &pkt, ConnTracker& tracker) override;
-    [[nodiscard]] constexpr L7Proto protocol() const override { return L7Proto::TLS_HANDSHAKE; }
+    [[nodiscard]] constexpr L7Proto protocol() const override { return L7Proto::TLS; }
     [[nodiscard]] static constexpr std::string_view name()
     {
         return std::string_view{"tls_handshake_classifier"};

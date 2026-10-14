@@ -3,7 +3,9 @@
 //
 
 #include "split.hpp"
+
 #include "../../checksum.hpp"
+#include "../markers.hpp"
 #include <cstring>
 #include <iostream>
 #include <print>
@@ -11,15 +13,16 @@
 #include <spdlog/spdlog.h>
 
 namespace helpers {
-static std::size_t do_operation(const std::size_t start, const Split::Operation oper, const std::size_t offset)
+
+std::size_t do_operation(const std::size_t start, const Position::Operation oper, const std::size_t offset)
 {
     std::size_t ret = start;
     switch (oper) {
-    case Split::Operation::Add: {
+    case Position::Operation::Add: {
         ret += offset;
         break;
     }
-    case Split::Operation::Subtract: {
+    case Position::Operation::Subtract: {
         ret -= offset;
         break;
     }
@@ -29,6 +32,7 @@ static std::size_t do_operation(const std::size_t start, const Split::Operation 
 
     return ret;
 };
+
 
 static std::pair<std::vector<Packet>::iterator, std::size_t> find_packet_by_offset(std::vector<Packet> &packets,
     const std::size_t split_pos, bool handle_fake)
@@ -52,20 +56,12 @@ static std::pair<std::vector<Packet>::iterator, std::size_t> find_packet_by_offs
     return { iter.base(), split_pos_relative_to_packet };
 }
 
-// <new span, success>
-static bool safe_subspan(std::span<const char> &span, const std::size_t offset)
-{
-    if (span.size() < offset) { return false; }
-    span = span.subspan(offset);
-    return true;
-}
-
 static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span<const char> payload)
 {
-    // It is guaranteed to be a TLS handshake (because of the classifier), nothing else is guaranteed besides that
-    constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
+    // it is guaranteed to be a tls handshake (because of the classifier), nothing else is guaranteed besides that
+    constexpr auto tls_handshake_type = 0x16;
     assert(payload.size() >= 5);
-    assert(payload[0] == TLS_HANDSHAKE_TYPE);
+    assert(payload[0] == tls_handshake_type);
     assert(payload[1] == 0x03 && (payload[2] == 0x03 || payload[2] == 0x01));
 
     const auto initial = payload;
@@ -73,40 +69,40 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
     // content stuff
     payload = payload.subspan(5);// skip header bytes, get to content
 
-    // From now on I need to do all the checks, because Classifier checks just the header (first 5 bytes)
-    if (payload[0] != 0x01) {// content type is not ClientHello
-        // std::println(std::cerr, "Content type is not ClientHello");
+    // from now on i need to do all the checks, because classifier checks just the header (first 5 bytes)
+    if (payload[0] != 0x01) {// content type is not clienthello
+        // std::println(std::cerr, "content type is not clienthello");
         return std::nullopt;
     }
 
-    if (!safe_subspan(payload, 38)) {// skip type(1) + length(3) + legacyVersion(2) + random(32) fields
-        std::println(std::cerr, "Ill-formed TLS");
+    if (!safe_subspan(payload, 38)) {// skip type(1) + length(3) + legacyversion(2) + random(32) fields
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
 
     const auto legacy_session_id_len = static_cast<std::uint8_t>(payload[0]);
     if (!safe_subspan(payload, sizeof(legacy_session_id_len) + legacy_session_id_len)) {
-        std::println(std::cerr, "Ill-formed TLS");
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
 
     std::uint16_t cipher_suites_len = 0;
     if (payload.size() < sizeof(cipher_suites_len)) {
-        std::println(std::cerr, "Ill-formed TLS");
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
     std::memcpy(&cipher_suites_len, payload.data(), sizeof(cipher_suites_len));
     cipher_suites_len = ntohs(cipher_suites_len);
 
     if (!safe_subspan(payload, sizeof(cipher_suites_len) + cipher_suites_len + 2)) {
-        std::println(std::cerr, "Ill-formed TLS");
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
 
     // parse extensions (sni is here) (loop)
     std::uint16_t exts_len = 0;
     if (payload.size() < sizeof(exts_len)) {
-        std::println(std::cerr, "Ill-formed TLS");
+        std::println(std::cerr, "ill-formed tls");
         return std::nullopt;
     }
     std::memcpy(&exts_len, payload.data(), sizeof(exts_len));
@@ -116,7 +112,7 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
     while (!payload.empty()) {
         std::uint16_t ext_type = 0;
         if (payload.size() < sizeof(ext_type)) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
 
@@ -128,17 +124,17 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
 
         std::uint16_t ext_len = 0;
         if (payload.size() < sizeof(ext_len)) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
         std::memcpy(&ext_len, payload.data(), sizeof(ext_len));
         ext_len = ntohs(ext_len);
 
-        constexpr auto EXT_SNI_TYPE = 0x00;
-        if (ext_type != EXT_SNI_TYPE) {
+        constexpr auto ext_sni_type = 0x00;
+        if (ext_type != ext_sni_type) {
 
             if (!safe_subspan(payload, sizeof(ext_len) + ext_len)) {
-                std::println(std::cerr, "Ill-formed TLS");
+                std::println(std::cerr, "ill-formed tls");
                 return std::nullopt;
             }
             continue;
@@ -148,13 +144,13 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
 
         std::uint16_t serv_name_list_len = 0;
         if (payload.size() < sizeof(serv_name_list_len) + 1) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
         std::memcpy(&serv_name_list_len, payload.data(), sizeof(serv_name_list_len));
         serv_name_list_len = ntohs(serv_name_list_len);
 
-        if (payload[2] != 0x00) {// well acyually servname list is a list, but it is ALWAYS 1 element so idc
+        if (payload[2] != 0x00) {// well acyually servname list is a list, but it is always 1 element so idc
             return std::nullopt;
         }
 
@@ -162,14 +158,14 @@ static std::optional<std::pair<std::string_view, std::size_t>> get_sni(std::span
 
         std::uint16_t hostname_len = 0;
         if (payload.size() < sizeof(hostname_len)) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
         std::memcpy(&hostname_len, payload.data(), sizeof(hostname_len));
         hostname_len = ntohs(hostname_len);
 
         if (payload.size() < sizeof(hostname_len) + hostname_len) {
-            std::println(std::cerr, "Ill-formed TLS");
+            std::println(std::cerr, "ill-formed tls");
             return std::nullopt;
         }
 
@@ -202,8 +198,7 @@ static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
 
     auto *tcp = static_cast<tcphdr *>(second.transport_hdr());
     tcp->seq = htonl(ntohl(tcp->seq) + static_cast<std::uint32_t>(split_pos_relative_to_packet));
-    tcp->check = 0;
-    tcp->check = calc_tcp_checksum(second);
+    calc_packet_checksum(second);
 
     // First packet
     // ACCEPT -> DROP_AND_SEND
@@ -216,8 +211,7 @@ static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
     auto *ip = pkt.network_hdr();
 
     ip->tot_len = htons((ip->ihl * 4) + (tcp->doff * 4) + static_cast<std::uint16_t>(pkt.payload().size()));
-    tcp->check = 0;
-    tcp->check = calc_tcp_checksum(pkt);
+    calc_packet_checksum(pkt);
 
     packets.insert(iter + 1, std::move(second));
 }
@@ -249,7 +243,7 @@ std::expected<bool, std::string> split::split(std::vector<Packet>& packets, cons
     case L7Proto::HTTP: {
         return split_http(packets, full_payload, cfg);
     }
-    case L7Proto::TLS_HANDSHAKE: {
+    case L7Proto::TLS: {
         return split_tls(packets, full_payload, cfg);
     }
     default: {
@@ -260,40 +254,32 @@ std::expected<bool, std::string> split::split(std::vector<Packet>& packets, cons
 
 std::expected<bool, std::string> split::split_http(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
 {
-    const std::string_view payload_str{ full_payload };
-
-    constexpr std::string_view HOST_HEADER_NAME = "Host:";
-    const auto host_subrange = std::ranges::search(payload_str, HOST_HEADER_NAME, [](const auto ch1, const auto ch2) {
-        return std::tolower(ch1) == std::tolower(ch2);
-    });
-    if (host_subrange.empty()) {
-        SPDLOG_WARN("Did not find 'Host' in HTTP headers");
-        return {false};
+    const auto markers_res = find_markers(full_payload, L7Proto::HTTP);
+    if (!markers_res.has_value()) {
+        return std::unexpected{"Could not parse markers"};
     }
-    const auto host_pos = std::distance(payload_str.begin(), host_subrange.begin());
-    const auto host_end = payload_str.find("\r\n", static_cast<std::size_t>(host_pos));
-    if (host_end == std::string::npos) {
-        return std::unexpected{"Did not find 'Host' header in HTTP headers"};
-    }
-
-    std::string_view const host{ payload_str.data() + host_pos + HOST_HEADER_NAME.size() + 1,
-        payload_str.data() + host_end };
-    if (cfg.hosts.has_value() && !cfg.hosts.value().contains(std::string{ host })) {
-        SPDLOG_INFO("Host {} is not in allowed hosts list, skip", host);
-        return {false};
-    }
+    const auto& marks = markers_res.value();
 
     std::size_t split_pos = 0;
 
     if (cfg.pos.arg == "hoststart") {
-        const auto offset = helpers::do_operation(0, cfg.pos.operation, cfg.pos.offset);
-        split_pos = static_cast<std::size_t>(host_pos) + HOST_HEADER_NAME.size() + 1 + offset;
+        if (!marks.hoststart.has_value()) {
+            return std::unexpected{"Could not find 'hoststart'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hoststart.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "hostend") {
-        const auto offset = helpers::do_operation(host.size(), cfg.pos.operation, cfg.pos.offset);
-        split_pos = static_cast<std::size_t>(host_pos) + HOST_HEADER_NAME.size() + 1 + offset;
+        if (!marks.hostend.has_value()) {
+            return std::unexpected{"Could not find 'hostend'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hostend.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "hostmid") {
-        const auto offset = helpers::do_operation(host.size() / 2, cfg.pos.operation, cfg.pos.offset);
-        split_pos = static_cast<std::size_t>(host_pos) + HOST_HEADER_NAME.size() + 1 + offset;
+        if (!marks.hostmid.has_value()) {
+            return std::unexpected{"Could not find 'hostmid'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hostmid.value(), cfg.pos.operation, cfg.pos.offset);
     } else {
         const auto offset = cfg.pos.offset;
         split_pos = offset;
@@ -312,34 +298,37 @@ std::expected<bool, std::string> split::split_http(std::vector<Packet>& packets,
 
 std::expected<bool, std::string> split::split_tls(std::vector<Packet>& packets, const std::vector<char>& full_payload, const SplitConfig& cfg)
 {
-    const auto sni_opt = helpers::get_sni(full_payload);
-    if (!sni_opt.has_value()) {
-        SPDLOG_WARN("SNI Extension was not found in this handshake");
-        return {false};
+    const auto markers_res = find_markers(full_payload, L7Proto::TLS);
+    if (!markers_res.has_value()) {
+        return std::unexpected{"Could not parse markers"};
     }
-
-    const auto &[sni_str, sniext_offset] = sni_opt.value();
-    if (cfg.hosts.has_value() && !cfg.hosts.value().contains(std::string{ sni_str.data() })) {
-        SPDLOG_INFO("Host {} is not in allowed hosts list, skip", sni_str);
-        return {false};
-    }
-
-    const auto sni_str_pos =
-        static_cast<std::size_t>(std::distance(static_cast<const char *>(full_payload.data()), sni_str.data()));
+    const auto& marks = markers_res.value();
 
     std::size_t split_pos = 0;
-
     if (cfg.pos.arg == "hoststart") {
-        const auto offset = helpers::do_operation(0, cfg.pos.operation, cfg.pos.offset);
-        split_pos = sni_str_pos + offset;
+        if (!marks.hoststart.has_value()) {
+            return std::unexpected{"Could not find 'hoststart'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hoststart.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "hostend") {
-        const auto offset = helpers::do_operation(sni_str.size(), cfg.pos.operation, cfg.pos.offset);
-        split_pos = sni_str_pos + offset;
+        if (!marks.hostend.has_value()) {
+            return std::unexpected{"Could not find 'hostend'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hostend.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "hostmid") {
-        const auto offset = helpers::do_operation(sni_str.size() / 2, cfg.pos.operation, cfg.pos.offset);
-        split_pos = sni_str_pos + offset;
+        if (!marks.hostmid.has_value()) {
+            return std::unexpected{"Could not find 'hostmid'"};
+        }
+
+        split_pos = helpers::do_operation(marks.hostmid.value(), cfg.pos.operation, cfg.pos.offset);
     } else if (cfg.pos.arg == "sniext") {
-        split_pos = helpers::do_operation(sniext_offset, cfg.pos.operation, cfg.pos.offset);
+        if (!marks.sniext.has_value()) {
+            return std::unexpected{"Could not find 'sniext'"};
+        }
+
+        split_pos = helpers::do_operation(marks.sniext.value(), cfg.pos.operation, cfg.pos.offset);
     } else {
         const auto offset = cfg.pos.offset;
         split_pos = offset;

@@ -4,10 +4,12 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "splitter.hpp"
-#include "spdlog/spdlog.h"
 
 #include "../checksum.hpp"
+#include "algorithms/common.hpp"
 #include "algorithms/split.hpp"
+#include "markers.hpp"
+#include "spdlog/spdlog.h"
 #include <arpa/inet.h>
 #include <filesystem>
 #include <fstream>
@@ -16,58 +18,41 @@
 bool Splitter::check_ip(const std::vector<Packet> &packets) const
 {
     assert(!packets.empty());
-    if (allowed_ips_.has_value()) {
+    if (args_.allowed_ips.has_value()) {
         const auto addr = packets.front().network_hdr()->daddr;
-        if (!allowed_ips_.value().contains(addr)) { return false; }
+        if (!args_.allowed_ips.value().contains(addr)) { return false; }
     }
 
     return true;
 }
-
-static bool timestamp_val_offset(Packet &packet, const int offset)
+bool Splitter::check_host(const std::vector<Packet> &packets, const Connection &conn) const
 {
-    auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-    std::span<char> tcp_bytes{ static_cast<char *>(packet.transport_hdr()), static_cast<std::size_t>(tcp->doff * 4) };
-    if (tcp_bytes.size() <= sizeof(tcphdr)) {
-        return false;// no TCP options
+    if (!args_.allowed_hosts.has_value()) { return true; }
+
+    std::vector<char> full_payload;
+
+    for (const auto &pkt : packets) {
+        if (pkt.is_fake_blob) {
+            continue; // we really don't care what the domains are in fake blobs
+        }
+
+        const auto payload = pkt.payload();
+        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
     }
 
-    constexpr static std::uint8_t TS_OPT_KIND = 8;
-    constexpr static std::uint8_t TS_OPT_SIZE = 10;
-
-    tcp_bytes = tcp_bytes.subspan(sizeof(tcphdr));
-    while (!tcp_bytes.empty()) {
-        if (tcp_bytes.size() < 2) {
-            return false;// not enough bytes to get KIND,LENGTH
-        }
-
-        const std::uint8_t kind = tcp_bytes[0];
-        if (kind == 1) {// no-op
-            tcp_bytes = tcp_bytes.subspan(1);
-            continue;
-        }
-
-        const std::uint8_t size = tcp_bytes[1];
-        if (kind != TS_OPT_KIND) {
-            if (tcp_bytes.size() < size) { return false; }
-
-            assert(size > 0);
-            tcp_bytes = tcp_bytes.subspan(size);// size includes kind,length + payload
-            continue;
-        }
-
-        if (size < TS_OPT_SIZE || size > TS_OPT_SIZE) { return false; }
-
-        auto *tv = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2));
-        auto *tr = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2 + sizeof(*tv)));
-
-        *tv = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tv)) + offset));
-        *tr = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tr)) + offset));
-
-        break;
+    const auto markers_res = find_markers(full_payload, conn.payload_proto());
+    if (!markers_res.has_value()) {
+        return false;// that means this is some kind malformed request and idc
     }
 
-    return true;
+    const auto &marks = markers_res.value();
+    if (!marks.hoststart.has_value() || !marks.hostend.has_value()) {
+        return false;// malformed request, how does this even happen
+    }
+
+    const std::string_view host{ std::next(full_payload.data(), static_cast<std::ptrdiff_t>(marks.hoststart.value())),
+        marks.hostend.value() - marks.hoststart.value() };
+    return args_.allowed_hosts.value().contains(std::string{ host });
 }
 
 void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, const Connection &conn)
@@ -75,7 +60,7 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
     auto filtered_packets = std::ranges::views::filter(packets, [handle_fake](const Packet &packet) {
         return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
     });
-    if (!splits_.empty()) {
+    if (!args_.splits.empty()) {
         std::vector<char> full_payload;
 
         for (const auto &pkt : filtered_packets) {
@@ -83,11 +68,9 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
             full_payload.insert(full_payload.end(), payload.begin(), payload.end());
         }
 
-        for (const auto &split_pos : splits_) {
-            auto res = split::split(packets,
-                split::SplitConfig{ .pos = split_pos, .hosts = allowed_hosts_, .handle_fake = handle_fake },
-                full_payload,
-                conn);
+        for (const auto &split_pos : args_.splits) {
+            auto res = split::split(
+                packets, split::SplitConfig{ .pos = split_pos, .handle_fake = handle_fake }, full_payload, conn);
             if (!res) {
                 SPDLOG_WARN(
                     "Wasn't able to split packet at {}:{}, because: {}", split_pos.arg, split_pos.offset, res.error());
@@ -95,40 +78,47 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
     }
 
-    if (ipv4_ttl_.has_value()) {
-        for (auto &packet : filtered_packets) { packet.network_hdr()->ttl = ipv4_ttl_.value(); }
+    if (args_.ipv4_ttl.has_value()) {
+        for (auto &packet : filtered_packets) { packet.network_hdr()->ttl = args_.ipv4_ttl.value(); }
     }
 
-    if (ts_offset_.has_value()) {
+    if (args_.ts_offset.has_value()) {
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             for (auto &packet : filtered_packets) {
-                if (!timestamp_val_offset(packet, ts_offset_.value())) { SPDLOG_WARN("Failed to offset timestamp"); }
+                if (!timestamp_val_offset(packet, args_.ts_offset.value())) {
+                    SPDLOG_WARN("Failed to offset timestamp");
+                }
 
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                tcp->check = 0;
-                tcp->check = calc_tcp_checksum(packet);
+                calc_packet_checksum(packet);
             }
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
         }
     }
 
-    if (seqovl_.has_value()) { seqovl(packets, handle_fake, conn); }
+    if (args_.seqovl.has_value()) {
+        if (conn.get_l4_proto() == IPPROTO_TCP) {
+            seqovl(packets, handle_fake, conn);
+        } else {
+            SPDLOG_WARN("Seqovl is defined but the protocol is not TCP");
+        }
+    }
 
-    if (seq_offset_.has_value()) {
+    if (args_.seq_offset.has_value()) {
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             for (auto &packet : filtered_packets) {
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                tcp->seq = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + seq_offset_.value()));
-                tcp->check = 0;
-                tcp->check = calc_tcp_checksum(packet);
+                tcp->seq =
+                    htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + args_.seq_offset.value()));
+                calc_packet_checksum(packet);
             }
         } else {
             SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
     }
 
-    if (badcksum_) {
+    if (args_.badcksum) {
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             for (auto &packet : filtered_packets) {
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
@@ -141,133 +131,83 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
     }
 }
 
-static std::vector<Packet>
-    segmentize(std::span<const char> full_payload, unsigned long mss, const Packet &orig_packet, unsigned start_seq)
-{
-    auto packet_view = parse_packet_view(orig_packet);
-    std::span<const char> payload{ full_payload };
-
-    std::vector<Packet> splitted;
-    splitted.reserve((full_payload.size() / mss) + 1);
-
-    while (!payload.empty()) {
-        const auto chunk_size = std::min<std::size_t>(payload.size(), mss);
-
-        auto new_packet = create_packet_from(packet_view, payload.subspan(0, chunk_size));
-        new_packet.is_fake_blob = orig_packet.is_fake_blob;
-        new_packet.action.action = PacketAction::Action::SEND;
-        new_packet.action.packet_id = 0;
-
-        auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());
-        tcp->seq = htonl(start_seq);
-        tcp->check = 0;
-        tcp->check = calc_tcp_checksum(new_packet);
-
-        splitted.push_back(std::move(new_packet));
-
-        payload = payload.subspan(chunk_size);
-        start_seq += chunk_size;
-    }
-
-    if (orig_packet.action.action == PacketAction::Action::SEND) {
-        splitted.front().action.action = PacketAction::Action::SEND;
-    } else {
-        splitted.front().action.action = PacketAction::Action::DROP_AND_SEND;
-        splitted.front().action.packet_id = orig_packet.action.packet_id;
-    }
-
-    return splitted;
-}
-
 void Splitter::seqovl(std::vector<Packet> &packets, bool handle_fake, const Connection &conn)
 {
-    if (conn.get_l4_proto() == IPPROTO_TCP) {
-        auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
-            return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
-        });
+    auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
+        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+    });
 
-        if (iter == packets.end()) { return; }
+    if (iter == packets.end()) { return; }
 
-        auto &packet = *iter;
-        const auto packet_view = parse_packet_view(packet);
-        const auto packet_pl = packet.payload();
+    auto &packet = *iter;
+    const auto packet_view = parse_packet_view(packet);
+    const auto packet_pl = packet.payload();
 
-        std::vector<char> new_payload(
-            packet.payload().size() + static_cast<std::size_t>(seqovl_.value()), 0);
+    std::vector<char> new_payload(packet.payload().size() + static_cast<std::size_t>(args_.seqovl.value()), 0);
 
-        if (seqovl_pat_.has_value()) {
-            std::span<char> full_payload{new_payload.data(), static_cast<std::size_t>(seqovl_.value())};
+    if (args_.seqovl_pat.has_value()) {
+        std::span<char> full_payload{ new_payload.data(), static_cast<std::size_t>(args_.seqovl.value()) };
 
-            while (!full_payload.empty()) {
-                const auto chunk_size = std::min(seqovl_pat_.value().size(), full_payload.size());
-                auto chunk = full_payload.subspan(0, chunk_size);
-                std::memcpy(chunk.data(), seqovl_pat_.value().data(), chunk_size);
-                full_payload = full_payload.subspan(chunk_size);
-            }
+        while (!full_payload.empty()) {
+            const auto chunk_size = std::min(args_.seqovl_pat.value().size(), full_payload.size());
+            auto chunk = full_payload.subspan(0, chunk_size);
+            std::memcpy(chunk.data(), args_.seqovl_pat.value().data(), chunk_size);
+            full_payload = full_payload.subspan(chunk_size);
         }
+    }
 
-        std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(seqovl_.value())),
-            packet_pl.data(),
-            packet_pl.size());
+    std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(args_.seqovl.value())),
+        packet_pl.data(),
+        packet_pl.size());
 
-        auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-        auto *ip = packet.network_hdr();
+    auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+    auto *ip = packet.network_hdr();
 
-        const auto mss =
-            static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcp));
+    const auto mss =
+        static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcp));
 
-        if (new_payload.size() > mss) {
-            auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value());
-            auto splitted = segmentize(new_payload, mss, packet, start_seq);
+    if (new_payload.size() > mss) {
+        auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value());
+        auto splitted = segmentize(new_payload, mss, packet, start_seq);
 
-            iter = packets.erase(iter);
-            packets.insert(iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
-        } else {
-            auto new_packet = create_packet_from(packet_view, new_payload);
-            new_packet.is_fake_blob = packet.is_fake_blob;
-            if (packet.action.action == PacketAction::Action::SEND) {
-                new_packet.action.action = PacketAction::Action::SEND;
-            } else {
-                new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
-                new_packet.action.packet_id = packet.action.packet_id;
-            }
-
-            auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());// NOLINT
-            tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_.value()));
-            tcp->check = 0;
-            tcp->check = calc_tcp_checksum(new_packet);
-
-            std::swap(packet, new_packet);
-        }
+        iter = packets.erase(iter);
+        packets.insert(iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
     } else {
-        SPDLOG_ERROR("Seqovl is defined but the L4 protocol is not TCP");
+        auto new_packet = create_packet_from(packet_view, new_payload);
+        new_packet.is_fake_blob = packet.is_fake_blob;
+        if (packet.action.action == PacketAction::Action::SEND) {
+            new_packet.action.action = PacketAction::Action::SEND;
+        } else {
+            new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
+            new_packet.action.packet_id = packet.action.packet_id;
+        }
+
+        auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());// NOLINT
+        tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value()));
+        calc_packet_checksum(new_packet);
+
+        std::swap(packet, new_packet);
     }
 }
 
 void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
 {
     if (!check_ip(vec)) { return; }
+    if (!check_host(vec, conn)) { return; }
 
-    if (fake_blob_.has_value()) {
+    if (args_.fake_blob.has_value()) {
         const auto front_view = parse_packet_view(vec.front());
 
-        Packet new_packet = create_packet_from(front_view, fake_blob_.value());
+        Packet new_packet = create_packet_from(front_view, args_.fake_blob.value());
         new_packet.action.action = PacketAction::Action::SEND;
         new_packet.action.packet_id = 0;
 
         std::vector<Packet> blob_packets;
         blob_packets.push_back(std::move(new_packet));
         blob_packets.front().is_fake_blob = true;
+        calc_packet_checksum(blob_packets.front());
 
         process(blob_packets, true, conn);
-
-        if (!badcksum_) {
-            for (auto &packet : blob_packets) {
-                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                tcp->check = 0;
-                tcp->check = calc_tcp_checksum(packet);
-            }
-        }
 
         for (auto &packet : blob_packets) { packet.is_fake_blob = true; }
 
@@ -280,44 +220,8 @@ void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
 
 bool Splitter::matches(const std::vector<Packet> &packets, const Connection &conn) const
 {
-    if (l7_payload_.has_value()) { return conn.payload_proto() == l7_payload_.value(); }
+    if (args_.l7_payload.has_value()) { return conn.payload_proto() == args_.l7_payload.value(); }
     return true;
-}
-
-static std::vector<char> parse_blob(const std::string_view &str)
-{
-    if (str.starts_with("0x")) {
-        std::string hex{ str.substr(2) };
-        if (hex.size() % 2 != 0) { hex.insert(hex.begin(), '0'); }
-
-        std::vector<char> bytes;
-        for (unsigned int i = 0; i < hex.length(); i += 2) {
-            const std::string byteString = hex.substr(i, 2);
-            char byte = static_cast<char>(strtol(byteString.c_str(), nullptr, 16));
-            bytes.push_back(byte);
-        }
-
-        return bytes;
-    } else {
-        if (!std::filesystem::exists(str)) {
-            throw std::runtime_error(std::format("Blob at filepath '{}' does not exist", str));
-        }
-
-        auto *fp = std::fopen(str.data(), "rb");
-        if (!fp) { throw std::runtime_error(std::format("Could not open file '{}'", str)); }
-        int ret = std::fseek(fp, 0U, SEEK_END);
-        if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
-        const auto size = std::ftell(fp);
-        if (size < 0) { throw std::runtime_error(std::strerror(errno)); }
-        ret = std::fseek(fp, 0U, SEEK_SET);
-        if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
-        std::vector<char> buf(size, 0);
-        const auto rd = std::fread(buf.data(), 1U, static_cast<std::size_t>(size), fp);
-        if (rd < 0) { throw std::runtime_error(std::strerror(errno)); }
-        ret = std::fclose(fp);
-
-        return buf;
-    }
 }
 
 void Splitter::parse_config(const toml::table *table)
@@ -329,20 +233,20 @@ void Splitter::parse_config(const toml::table *table)
         }
 
         for (const auto &node : *split_node->as_array()) {
-            Split new_split{};
+            Position new_split{};
             if (node.is_number()) {
                 new_split.offset = static_cast<std::size_t>(node.as_integer()->get());
             } else {
                 const auto split_str = node.as_string()->get();
-                new_split = parse_split(split_str);
+                new_split = parse_position(split_str);
             }
-            splits_.push_back(std::move(new_split));
+            args_.splits.push_back(std::move(new_split));
         }
     }
 
     const auto *hosts_node = table->get("allowed_hosts");
     if (hosts_node != nullptr) {
-        auto &allowed_hosts = allowed_hosts_.emplace();
+        auto &allowed_hosts = args_.allowed_hosts.emplace();
 
         if (!hosts_node->is_array()) { throw std::runtime_error("allowed_hosts must be an array"); }
 
@@ -357,7 +261,7 @@ void Splitter::parse_config(const toml::table *table)
 
     const auto *ips_node = table->get("allowed_ips");
     if (ips_node != nullptr) {
-        auto &allowed_ips = allowed_ips_.emplace();
+        auto &allowed_ips = args_.allowed_ips.emplace();
 
         if (!ips_node->is_array()) { throw std::runtime_error("allowed_ips must be an array"); }
 
@@ -380,7 +284,7 @@ void Splitter::parse_config(const toml::table *table)
         if (!blob_node->is_string()) { throw std::runtime_error("fake_blob must be a string"); }
 
         auto buf = parse_blob(blob_node->as_string()->get());
-        fake_blob_.emplace(std::move(buf));
+        args_.fake_blob.emplace(std::move(buf));
     }
 
     const auto *cksum_node = table->get("badcksum");
@@ -388,28 +292,28 @@ void Splitter::parse_config(const toml::table *table)
         if (!cksum_node->is_boolean()) { throw std::runtime_error("badcksum must be a bool"); }
 
         srand(time(nullptr));
-        badcksum_ = cksum_node->as_boolean()->get();
+        args_.badcksum = cksum_node->as_boolean()->get();
     }
 
     const auto seq_node = table->get("seq_off");
     if (seq_node != nullptr) {
         if (!seq_node->is_number()) { throw std::runtime_error("seq_off must be a number"); }
 
-        seq_offset_.emplace(seq_node->as_integer()->get());
+        args_.seq_offset.emplace(seq_node->as_integer()->get());
     }
 
     const auto *ts_node = table->get("ts_off");
     if (ts_node != nullptr) {
         if (!ts_node->is_number()) { throw std::runtime_error("ts_off must be a number"); }
 
-        ts_offset_.emplace(ts_node->as_integer()->get());
+        args_.ts_offset.emplace(ts_node->as_integer()->get());
     }
 
     const auto *ipv4_ttl_node = table->get("ipv4_ttl");
     if (ipv4_ttl_node != nullptr) {
         if (!ipv4_ttl_node->is_number()) { throw std::runtime_error("ipv4_ttl must be a number"); }
 
-        ipv4_ttl_.emplace(ipv4_ttl_node->as_integer()->get());
+        args_.ipv4_ttl.emplace(ipv4_ttl_node->as_integer()->get());
     }
 
     const auto *l7_proto_node = table->get("l7_payload");
@@ -417,14 +321,14 @@ void Splitter::parse_config(const toml::table *table)
         if (!l7_proto_node->is_string()) { throw std::runtime_error("l7_payload must be a string"); }
 
         const auto proto_str = l7_proto_node->as_string()->get();
-        l7_payload_.emplace(string_to_proto(proto_str));
+        args_.l7_payload.emplace(string_to_proto(proto_str));
     }
 
     const auto *seqovl_node = table->get("seqovl");
     if (seqovl_node != nullptr) {
         if (!seqovl_node->is_integer()) { throw std::runtime_error("seqovl must be an integer"); }
 
-        seqovl_.emplace(seqovl_node->as_integer()->get());
+        args_.seqovl.emplace(seqovl_node->as_integer()->get());
     }
 
     const auto *seqovl_ptrn_node = table->get("seqovl_pattern");
@@ -432,6 +336,6 @@ void Splitter::parse_config(const toml::table *table)
         if (!seqovl_ptrn_node->is_string()) { throw std::runtime_error("seqovl_pattern must be a string"); }
 
         auto buf = parse_blob(seqovl_ptrn_node->as_string()->get());
-        seqovl_pat_.emplace(std::move(buf));
+        args_.seqovl_pat.emplace(std::move(buf));
     }
 }

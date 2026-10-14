@@ -29,7 +29,7 @@ TEST_CASE_METHOD(TlsTestFixture, "Full TLS is classified correctly", "[tls_class
     auto res = classifier.classify(pkt);
     REQUIRE(res == ParseResult::SUCCESS);
     REQUIRE(pkt.is_payload_reasm == false);
-    REQUIRE(pkt.payload_proto == L7Proto::TLS_HANDSHAKE);
+    REQUIRE(pkt.payload_proto == L7Proto::TLS);
 }
 
 TEST_CASE_METHOD(TlsTestFixture, "Split TLS is classified correctly", "[tls_classifier]")
@@ -79,7 +79,7 @@ TEST_CASE_METHOD(TlsTestFixture, "Split TLS is classified correctly", "[tls_clas
 
     res = classifier.classify(second_pkt);
     REQUIRE(res == ParseResult::SUCCESS);
-    REQUIRE(second_pkt.payload_proto == L7Proto::TLS_HANDSHAKE);
+    REQUIRE(second_pkt.payload_proto == L7Proto::TLS);
     REQUIRE(second_pkt.is_payload_reasm == true);
 }
 
