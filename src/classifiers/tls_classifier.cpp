@@ -10,11 +10,8 @@
 #include <cstring>
 #include <print>
 
-std::expected<ParseResult, std::string> TlsHandshakeClassifier::classify(Connection& conn)
+std::expected<ParseResult, std::string> TlsHandshakeClassifier::classify(const std::vector<char>& payload, Connection& conn)
 {
-
-    std::vector<char> payload = concat(conn.get_reasm_frags());
-
     constexpr auto TLS_HDR_LEN = 5;
     if (payload.size() < TLS_HDR_LEN) {
         // Don't do conn.set_done(true) here, because it can get here when the host sends a SYN[/ACK]packet

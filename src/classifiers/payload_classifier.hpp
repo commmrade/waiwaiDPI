@@ -28,7 +28,7 @@ class PayloadClassifier //NOLINT
 {
 public:
     virtual ~PayloadClassifier() = default;
-    virtual std::expected<ParseResult, std::string> classify(Connection& conn) = 0;
+    virtual std::expected<ParseResult, std::string> classify(const std::vector<char>& full_payload, Connection& conn) = 0;
 
     virtual void parse_config([[maybe_unused]] const toml::table* table) {}
     [[nodiscard]] virtual constexpr L7Proto protocol() const = 0;

@@ -7,6 +7,8 @@
 #include "classifier.hpp"
 #include "conn_tracker.hpp"
 #include "consts.hpp"
+#include "modifiers/algorithms/common.hpp"
+
 #include <spdlog/spdlog.h>
 
 #include <cassert>
@@ -21,8 +23,10 @@
 
 ParseResult Classifier::try_payload(Connection& conn)
 {
+    const auto full_payload = concat(conn.get_reasm_frags());
+
     for (const auto &classifier : classifiers_) {
-        auto res = classifier->classify(conn);
+        auto res = classifier->classify(full_payload, conn);
         if (res) {
             switch (res.value()) {
             case ParseResult::SUCCESS: {

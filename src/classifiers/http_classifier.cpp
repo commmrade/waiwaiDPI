@@ -10,10 +10,8 @@
 #include "../packet_view.hpp"
 #include <netinet/in.h>
 
-std::expected<ParseResult, std::string> HttpClassifier::classify(Connection& conn)
+std::expected<ParseResult, std::string> HttpClassifier::classify(const std::vector<char>& payload, Connection& conn)
 {
-    std::vector<char> payload = concat(conn.get_reasm_frags());
-
     std::string_view payload_str{ payload };
     // First, try to find \r\n (the status line)
     const auto crln_pos = payload_str.find("\r\n");

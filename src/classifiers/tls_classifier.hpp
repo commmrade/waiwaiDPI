@@ -12,7 +12,7 @@ class Connection;
 class TlsHandshakeClassifier final : public PayloadClassifier
 {
 public:
-    std::expected<ParseResult, std::string> classify(Connection& conn) override;
+    std::expected<ParseResult, std::string> classify(const std::vector<char>& payload, Connection& conn) override;
     [[nodiscard]] constexpr L7Proto protocol() const override { return L7Proto::TLS; }
     [[nodiscard]] static constexpr std::string_view name()
     {
