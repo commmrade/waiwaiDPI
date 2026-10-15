@@ -32,7 +32,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Bad Checksum parameter", "[splitter_modif
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -76,7 +76,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Sequence offset parameter", "[splitter_mo
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -157,7 +157,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Timestamp offset parameter", "[splitter_m
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -200,7 +200,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "IPv4 TTL parameter", "[splitter_modifier]
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -245,7 +245,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob priority over original data", "[spli
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -293,7 +293,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob and original data are affected by se
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -342,7 +342,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for fake blob", "[splitter_modifie
         packet_1_view.network_hdr->protocol);
     conn.set_mss(1440);
 
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -388,7 +388,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for original data", "[splitter_mod
         packet_1_view.network_hdr->protocol);
     conn.set_mss(1800);
 
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -435,7 +435,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for both fake and original data", 
         packet_1_view.network_hdr->protocol);
     conn.set_mss(1800);
 
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -479,7 +479,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl segmentation", "[splitter_modifier
         packet_1_view.network_hdr->protocol);
     conn.set_mss(1571 + 24); // payload is 1571 bytes
 
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -532,7 +532,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Host check works on original data, not fa
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
     conn.set_mss(1800);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));

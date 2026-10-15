@@ -3,15 +3,15 @@
 //
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include <spdlog/spdlog.h>
 #include "conn_tracker.hpp"
 #include "consts.hpp"
-#include "nfq.hpp"
 #include "iface.hpp"
+#include "nfq.hpp"
 #include <cassert>
 #include <linux/netfilter.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
+#include <spdlog/spdlog.h>
 
 void Connection::set_l4_proto(const std::uint8_t proto)
 {
@@ -55,15 +55,26 @@ void Connection::set_mss(const int mss)
     if (get_l4_proto() == IPPROTO_TCP) {
         std::get<Tcp>(l4_state_).mss = mss;
     } else {
-        throw std::runtime_error{"Not supported"};
+        throw std::runtime_error{ "Not supported" };
     }
 }
-void Connection::reset_reasm()
+void Connection::reset_reasm() { reasm_.frags.clear(); }
+void Connection::sort_reasm()
 {
-    reasm_.frags.clear();
-    reasm_.pos = 0;
-    reasm_.total_size = 0;
-    reasm_.expected_seq = 0;
+    if (get_l4_proto() == IPPROTO_TCP) {
+        std::sort(reasm_.frags.begin(), reasm_.frags.end(), [](const Packet &lhs, const Packet &rhs) {
+            const auto *lhs_tcp = static_cast<const tcphdr *>(lhs.transport_hdr());
+            const auto *rhs_tcp = static_cast<const tcphdr *>(rhs.transport_hdr());
+
+            const uint32_t lhs_seq = ntohl(lhs_tcp->seq);
+            const uint32_t rhs_seq = ntohl(rhs_tcp->seq);
+
+            // Modular comparison (RFC 1982 / RFC 793 SEQ_LT): correct across wraparound
+            return static_cast<int32_t>(lhs_seq - rhs_seq) < 0;
+        });
+    } else {
+        throw std::logic_error{ "sort Not supported for anything other than tcp" };
+    }
 }
 
 void Connection::track_transport(const PacketView &packet)
@@ -86,7 +97,7 @@ void Connection::track_transport(const PacketView &packet)
 static std::optional<int> parse_mss_opt(std::span<const char> tcpb)
 {
     if (tcpb.size() <= sizeof(tcphdr)) {
-        return false; // no TCP options
+        return false;// no TCP options
     }
 
     constexpr static std::uint8_t MSS_OPT_KIND = 2;
@@ -123,8 +134,8 @@ static std::optional<int> parse_mss_opt(std::span<const char> tcpb)
 
 void Connection::track_tcp(const PacketView &packet)
 {
-    const tcphdr* tcph = std::get<0>(packet.transport_hdr);
-    Tcp& tcp_state = std::get<1>(l4_state_);
+    const tcphdr *tcph = std::get<0>(packet.transport_hdr);
+    Tcp &tcp_state = std::get<1>(l4_state_);
     tcp_state.cur_seq = ntohl(tcph->seq);
 
     // Track TCP state
@@ -134,22 +145,22 @@ void Connection::track_tcp(const PacketView &packet)
     // If we see a SYN + ACK => connection ESTAB (really likely)
 
     if (tcph->syn) {
-        const auto* iph = packet.network_hdr;
+        const auto *iph = packet.network_hdr;
 
         auto tcpb = packet.packet.subspan(iph->ihl * 4);
         tcpb = tcpb.subspan(0, std::min<std::size_t>(tcpb.size(), tcph->doff * 4));
 
         const auto mss_opt = parse_mss_opt(tcpb);
 
-        if (mss_opt.has_value()) {
-            tcp_state.mss = mss_opt.value();
-        }
+        if (mss_opt.has_value()) { tcp_state.mss = mss_opt.value(); }
     }
 
     {
         if (tcp_state.state == Tcp::TcpState::UNKNOWN && (tcph->syn && !tcph->ack)) {
             tcp_state.state = Tcp::TcpState::SYN;
-            tcp_state.expected_seq = tcp_state.cur_seq + 1; // it sent SYN, it increased SEQ by 1, if next packet is this seq, that means the SYN was ACKed
+            tcp_state.expected_seq =
+                tcp_state.cur_seq
+                + 1;// it sent SYN, it increased SEQ by 1, if next packet is this seq, that means the SYN was ACKed
         } else if (tcp_state.state == Tcp::TcpState::SYN && (tcph->ack && ntohl(tcph->seq) == tcp_state.expected_seq)) {
             tcp_state.state = Tcp::TcpState::ESTAB;
             tcp_state.expected_seq = 0;
@@ -162,15 +173,13 @@ void Connection::track_tcp(const PacketView &packet)
     // It is kinda impossible to be sure that the connection is closed so I can only guess and rely on timers
     {
         if (tcp_state.state == Tcp::TcpState::ESTAB && tcph->fin) {
-            tcp_state.state = Tcp::TcpState::FIN; // FIN does not mean CLOSED, so I can't just delete this connection
+            tcp_state.state = Tcp::TcpState::FIN;// FIN does not mean CLOSED, so I can't just delete this connection
         }
     }
 
     // 3. RST - closed 100%
     {
-        if (tcph->rst) {
-            tcp_state.state = Tcp::TcpState::CLOSED;
-        }
+        if (tcph->rst) { tcp_state.state = Tcp::TcpState::CLOSED; }
     }
 }
 void Connection::track_udp([[maybe_unused]] const PacketView &packet) {}
@@ -200,9 +209,11 @@ int ConnTracker::timeout_for_tcp_state(const Connection::Tcp::TcpState state)
 }
 void ConnTracker::track(const PacketView &packet)
 {
-    const std::tuple conn_tuple{
-        packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port(), packet.network_hdr->protocol
-    };
+    const std::tuple conn_tuple{ packet.network_hdr->saddr,
+        packet.get_source_port(),
+        packet.network_hdr->daddr,
+        packet.get_dest_port(),
+        packet.network_hdr->protocol };
 
     auto conn_iter = conns_.find(conn_tuple);
     if (conn_iter == conns_.end()) {
@@ -214,6 +225,11 @@ void ConnTracker::track(const PacketView &packet)
     }
 
     conn_iter->second.track_transport(packet);
+
+    if (!packet.payload.empty()) {
+        conn_iter->second.add_reasm_frag(packet);
+        conn_iter->second.sort_reasm();
+    }
 
     conn_iter->second.update_last_packet_time(std::chrono::system_clock::now());
     conn_iter->second.set_bytes_transfered(conn_iter->second.bytes_transfered() + packet.payload.size());
@@ -228,9 +244,9 @@ Connection &ConnTracker::get_conn(const std::uint32_t saddr,
     return conns_.at({ saddr, source, daddr, dest, proto });
 }
 
-void ConnTracker::clear_dead_connections(mnl_socket* sock, const std::uint32_t queue_num)
+void ConnTracker::clear_dead_connections(mnl_socket *sock, const std::uint32_t queue_num)
 {
-    auto calculate_timeout = [](const Connection& conn) -> int {
+    auto calculate_timeout = [](const Connection &conn) -> int {
         int timeout_value = 0;
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             timeout_value = timeout_for_tcp_state(conn.get_l4_tcp().state);
@@ -248,15 +264,6 @@ void ConnTracker::clear_dead_connections(mnl_socket* sock, const std::uint32_t q
 
         auto timeout = calculate_timeout(iter->second);
         if (dur.count() >= timeout) {
-            // assert(iter->second.get_reasm_frags().empty()); // There can't be any packets here, because they are all processed
-            if (!iter->second.get_reasm_frags().empty()) {
-                for (const auto& pkt : iter->second.get_reasm_frags()) {
-                    int ret = send_verdict(sock, queue_num, pkt.action.packet_id, NF_DROP);
-                    if (ret < 0) {
-                        SPDLOG_WARN("Unable to drop packet with id: {}", pkt.action.packet_id);
-                    }
-                }
-            }
             iter = conns_.erase(iter);
         } else {
             ++iter;

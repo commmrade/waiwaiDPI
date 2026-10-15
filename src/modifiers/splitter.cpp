@@ -29,16 +29,7 @@ bool Splitter::check_host(const std::vector<Packet> &packets, const Connection &
 {
     if (!args_.allowed_hosts.has_value()) { return true; }
 
-    std::vector<char> full_payload;
-
-    for (const auto &pkt : packets) {
-        if (pkt.is_fake_blob) {
-            continue; // we really don't care what the domains are in fake blobs
-        }
-
-        const auto payload = pkt.payload();
-        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
-    }
+    const auto full_payload = concat(packets, true);
 
     const auto markers_res = find_markers(full_payload, conn.payload_proto());
     if (!markers_res.has_value()) {
@@ -61,12 +52,7 @@ void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, con
         return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
     });
     if (!args_.splits.empty()) {
-        std::vector<char> full_payload;
-
-        for (const auto &pkt : filtered_packets) {
-            const auto payload = pkt.payload();
-            full_payload.insert(full_payload.end(), payload.begin(), payload.end());
-        }
+        std::vector<char> const full_payload = concat(packets, !handle_fake);
 
         for (const auto &split_pos : args_.splits) {
             auto res = split::split(

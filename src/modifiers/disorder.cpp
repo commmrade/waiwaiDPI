@@ -46,15 +46,7 @@ static std::optional<std::size_t> calculate_seqovl_off(const Position &seqovl, c
 
 void Disorder::seqovl(std::vector<Packet> &packets, bool handle_fake, const Connection &conn)
 {
-    auto filtered_packets = std::ranges::views::filter(packets, [handle_fake](const Packet &packet) {
-        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
-    });
-    std::vector<char> full_payload;
-
-    for (const auto &pkt : filtered_packets) {
-        const auto payload = pkt.payload();
-        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
-    }
+    const auto full_payload = concat(packets, !handle_fake);
 
     auto markers = find_markers(full_payload, conn.payload_proto());
     if (!markers.has_value()) {
@@ -142,16 +134,7 @@ bool Disorder::check_host(const std::vector<Packet> &packets, const Connection &
 {
     if (!args_.allowed_hosts.has_value()) { return true; }
 
-    std::vector<char> full_payload;
-
-    for (const auto &pkt : packets) {
-        if (pkt.is_fake_blob) {
-            continue; // do not care about domains in fake blobs
-        }
-
-        const auto payload = pkt.payload();
-        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
-    }
+    const auto full_payload = concat(packets, true);
 
     const auto markers_res = find_markers(full_payload, conn.payload_proto());
     if (!markers_res.has_value()) {
@@ -174,12 +157,7 @@ void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, con
     });
 
     if (!args_.splits.empty()) {
-        std::vector<char> full_payload;
-
-        for (const auto &pkt : filtered_packets) {
-            const auto payload = pkt.payload();
-            full_payload.insert(full_payload.end(), payload.begin(), payload.end());
-        }
+        std::vector<char> const full_payload = concat(packets, !handle_fake);
 
         for (const auto &split_pos : args_.splits) {
             auto res = split::split(
@@ -243,16 +221,17 @@ void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
     }
 
-    auto reversible = std::ranges::views::filter(packets, [handle_fake](const Packet &packet) {
-        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
-    });
-    std::reverse(reversible.begin(), reversible.end());// NOLINT
+
 }
 
 void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
 {
-    if (!check_ip(vec)) { return; }
-    if (!check_host(vec, conn)) { return; }
+    if (!check_ip(vec)) {
+        return;
+    }
+    if (!check_host(vec, conn)) {
+        return;
+    }
 
     if (args_.fake_blob.has_value()) {
         const auto front_view = parse_packet_view(vec.front());
@@ -279,6 +258,11 @@ void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
     } else {
         process(vec, false, conn);
     }
+
+    auto reversible = std::ranges::views::filter(vec, [handle_fake = false](const Packet &packet) {
+        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+    });
+    std::reverse(reversible.begin(), reversible.end());// NOLINT
 }
 
 bool Disorder::matches(const std::vector<Packet> &packets, const Connection &conn) const

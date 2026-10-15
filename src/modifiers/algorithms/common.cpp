@@ -4,6 +4,8 @@
 
 #include "common.hpp"
 #include "../../checksum.hpp"
+
+#include <algorithm>
 #include <cassert>
 
 bool timestamp_val_offset(Packet &packet, const int offset)
@@ -86,4 +88,33 @@ std::vector<Packet>
     }
 
     return splitted;
+}
+std::vector<char> concat(std::vector<Packet> packets, const bool skip_fake)
+{
+    if (packets.front().network_hdr()->protocol == IPPROTO_TCP) {
+        std::stable_sort(packets.begin(), packets.end(), [](const Packet& lhs, const Packet& rhs) {
+            const auto *lhs_tcp = static_cast<const tcphdr *>(lhs.transport_hdr());
+            const auto *rhs_tcp = static_cast<const tcphdr *>(rhs.transport_hdr());
+
+            const uint32_t lhs_seq = ntohl(lhs_tcp->seq);
+            const uint32_t rhs_seq = ntohl(rhs_tcp->seq);
+
+            // Modular comparison (RFC 1982 / RFC 793 SEQ_LT): correct across wraparound
+            return static_cast<int32_t>(lhs_seq - rhs_seq) < 0;
+        });
+    } else {
+        throw std::logic_error("Cant concat non tcp segments yet");
+    }
+
+    std::vector<char> full_payload;
+    for (const auto &pkt : packets) {
+        if (skip_fake && pkt.is_fake_blob) {
+            continue; // do not care about domains in fake blobs
+        }
+
+        const auto payload = pkt.payload();
+        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
+    }
+
+    return full_payload;
 }

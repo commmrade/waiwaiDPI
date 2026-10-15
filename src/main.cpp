@@ -81,28 +81,20 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         packet.get_dest_port(),
         packet.network_hdr->protocol);
 
-    auto profile_iter = (*ctx->profiles).find({packet.get_dest_port(), packet.network_hdr->protocol});
+    auto profile_iter = ctx->profiles->find({packet.get_dest_port(), packet.network_hdr->protocol});
     assert(profile_iter != (*ctx->profiles).end());
     auto& profile = profile_iter->second;
 
-    if (!conn.is_done()) {
-        auto res = profile.classifier.classify(packet);
+    if (!packet.payload.empty() && !conn.is_done()) {
+        auto res = profile.classifier.classify(conn);
         if (res == ParseResult::SUCCESS) {
-            SPDLOG_DEBUG("Packet is classified as {}", static_cast<int>(packet.payload_proto));
-
-            auto &cfed_pkt = packet;
             std::vector<Packet> packets;
+            const std::vector<Packet> frags = conn.get_reasm_frags();
+            conn.reset_reasm();
 
-            if (cfed_pkt.is_payload_reasm) {
-                const std::vector<Packet> frags = conn.get_reasm_frags();
-                conn.reset_reasm();
-
-                packets.reserve(frags.size());
-                for (const auto &frag : frags) {
-                    packets.emplace_back(frag);
-                }
-            } else {
-                packets.emplace_back(create_packet(cfed_pkt));
+            packets.reserve(frags.size());
+            for (const auto &frag : frags) {
+                packets.emplace_back(frag);
             }
 
             profile.modifier.modify(packets, conn);
@@ -153,9 +145,14 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
                 }
             }
-        } else if (res == ParseResult::ERROR) {
-            ret = send_verdict(ctx->sock, ctx->queue_number, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
-            assert(ret);
+        } else {
+            if (conn.get_reasm_frags().size() >= Connection::MAX_REASM_SEGMENTS()) {
+                conn.set_done(true);
+                for (const auto &pkt : conn.get_reasm_frags()) {
+                    int ret = send_verdict(ctx->sock, ctx->queue_number, pkt.action.packet_id, NF_ACCEPT);
+                    if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
+                }
+            }
         }
     } else {
         SPDLOG_DEBUG("Packet {} is for a connection that is done", packet.packet_id);
@@ -284,14 +281,6 @@ int main(int argc, char *argv[])
 
     running.store(true);
     while (running.load()) {
-        const auto now = std::chrono::system_clock::now();
-        const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - last_check_time);
-        if (dur.count() >= CHECK_DEAD_CONNECTIONS_INTERVAL_SECS) {
-            SPDLOG_DEBUG("Deleting dead connections");
-            ctx.tracker->clear_dead_connections(ctx.sock, ctx.queue_number);
-            last_check_time = now;
-        }
-
         ssize_t const rcvd = mnl_socket_recvfrom(socket, buf.data(), BUF_SIZE);
         if (rcvd < 0 && errno == EINTR) {
             break;
@@ -305,6 +294,14 @@ int main(int argc, char *argv[])
             perror("cb run");
             return EXIT_FAILURE;
         }
+
+        const auto now = std::chrono::system_clock::now();
+        const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - last_check_time);
+        if (dur.count() >= CHECK_DEAD_CONNECTIONS_INTERVAL_SECS) {
+            SPDLOG_DEBUG("Deleting dead connections");
+            ctx.tracker->clear_dead_connections(ctx.sock, ctx.queue_number);
+            last_check_time = now;
+        }
     }
 
     for (const auto& profile : profiles) {
@@ -316,7 +313,11 @@ int main(int argc, char *argv[])
         } else {
             throw std::runtime_error("Unknown protocol");
         }
-        rule_remove(std::format("iptables -D OUTPUT -p {} -m {} --dport {} -j NFQUEUE --queue-num {}", protocol_str, protocol_str, profile.first.first, queue_number).c_str());
+        rule_remove(std::format(
+            "iptables -D OUTPUT -p {} -m {} --dport {} "
+            "-m connbytes --connbytes 0:{} --connbytes-dir original --connbytes-mode packets "
+            "-j NFQUEUE --queue-num {}",
+            protocol_str, protocol_str, profile.first.first, Connection::MAX_REASM_SEGMENTS(), queue_number).c_str());
     }
     rule_remove(std::format("iptables -D OUTPUT -m mark --mark {} -j ACCEPT", mark));
 

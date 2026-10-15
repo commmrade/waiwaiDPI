@@ -44,12 +44,16 @@ private:
 
     L7Proto payload_proto_{ L7Proto::UNKNOWN };
 
+    // struct
+    // {
+    //     std::vector<Packet> frags;
+    //     std::size_t pos{ 0 };
+    //     std::size_t total_size{ 0 };
+    //     std::optional<std::uint32_t> expected_seq{ 0 };
+    // } reasm_;
     struct
     {
         std::vector<Packet> frags;
-        std::size_t pos{ 0 };
-        std::size_t total_size{ 0 };
-        std::optional<std::uint32_t> expected_seq{ 0 };
     } reasm_;
 
     std::uint32_t saddr_;
@@ -73,6 +77,11 @@ public:
         return saddr_;
     }
 
+    static constexpr auto MAX_REASM_SEGMENTS()
+    {
+        return 20;
+    }
+
     [[nodiscard]] std::uint8_t get_l4_proto() const { return l4_proto_; }
     [[nodiscard]] const Tcp &get_l4_tcp() const { return std::get<1>(l4_state_); }
     [[nodiscard]] const Udp &get_l4_udp() const { return std::get<2>(l4_state_); }
@@ -81,19 +90,14 @@ public:
     int get_mss() const;
     void set_mss(const int mss);
 
-    bool is_reassembling() const { return reasm_.pos > 0 || reasm_.total_size > 0; }
 
     void reset_reasm();
 
     void add_reasm_frag(const PacketView& pkt) { reasm_.frags.emplace_back(create_packet(pkt)); }
     void add_reasm_frag(const Packet& pkt) { reasm_.frags.emplace_back(pkt); }
+    void sort_reasm();
+
     [[nodiscard]] const std::vector<Packet> &get_reasm_frags() const { return reasm_.frags; }
-    [[nodiscard]] std::size_t get_reasm_pos() const { return reasm_.pos; }
-    void set_reasm_pos(const std::size_t pos) { reasm_.pos = pos; }
-    [[nodiscard]] std::size_t get_reasm_total_size() const { return reasm_.total_size; }
-    void set_reasm_total_size(const std::size_t total_size) { reasm_.total_size = total_size; }
-    [[nodiscard]] std::optional<std::uint32_t> get_reasm_expected_seq() const { return reasm_.expected_seq; }
-    void set_reasm_expected_seq(const std::uint32_t seq) { reasm_.expected_seq = seq; }
 
     [[nodiscard]] std::size_t bytes_transfered() const { return pl_bytes_transfered_; }
     void set_bytes_transfered(const std::size_t bytes) { pl_bytes_transfered_ = bytes; }

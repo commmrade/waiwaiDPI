@@ -132,8 +132,14 @@ inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> bui
 
 
         // set up a rule
-        if (!rule_exists(std::format("-A OUTPUT -p {} --dport {} -m {} -j NFQUEUE --queue-num {}", protocol_str, protocol_str, port, queue_number))) {
-            rule_add(std::format("iptables -A OUTPUT -p {} --dport {} -j NFQUEUE --queue-num {}", protocol_str, port, queue_number));
+        if (!rule_exists(std::format("-A OUTPUT -p {} -m {} --dport {} "
+            "-m connbytes --connbytes 0:{} --connbytes-dir original --connbytes-mode packets "
+            "-j NFQUEUE --queue-num {}", protocol_str, protocol_str, port, Connection::MAX_REASM_SEGMENTS(), queue_number))) {
+            rule_add(std::format(
+            "iptables -A OUTPUT -p {} --dport {} "
+            "-m connbytes --connbytes 0:{} --connbytes-dir original --connbytes-mode packets "
+            "-j NFQUEUE --queue-num {}",
+            protocol_str, port, Connection::MAX_REASM_SEGMENTS(), queue_number));
         }
     }
 

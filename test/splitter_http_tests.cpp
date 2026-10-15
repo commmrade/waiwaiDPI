@@ -34,7 +34,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split for HTTP works", "[splitter_
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -73,7 +73,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at Header for HTTP works", "[splitt
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -113,7 +113,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at HEaDeR for HTTP works", "[splitt
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));
@@ -151,7 +151,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for HTTP works", "[splitte
         packet_1_view.network_hdr->daddr,
         packet_1_view.get_dest_port(),
         packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(packet_1_view);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
 
     packets.push_back(create_packet(packet_1_view));

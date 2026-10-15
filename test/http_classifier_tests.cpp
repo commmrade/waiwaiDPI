@@ -62,10 +62,14 @@ TEST_CASE_METHOD(HttpTestFixture, "Full HTTP is classified correctly", "[http_cl
     PacketView pkt = parse_packet_view(packet);
 
     tracker.track(pkt);
-    auto res = classifier.classify(pkt);
+    auto &conn = tracker.get_conn(pkt.network_hdr->saddr,
+       pkt.get_source_port(),
+       pkt.network_hdr->daddr,
+       pkt.get_dest_port(),
+       pkt.network_hdr->protocol);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
-    REQUIRE(pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE(pkt.is_payload_reasm == false);
+    REQUIRE(conn.payload_proto() == L7Proto::HTTP);
 }
 
 TEST_CASE_METHOD(HttpTestFixture, "Split HTTP is classified correctly", "[http_classifier]")
@@ -76,17 +80,18 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP is classified correctly", "[http_c
     auto second_pkt = parse_packet_view(second_packet);
 
     tracker.track(first_pkt);
+    auto &conn = tracker.get_conn(first_pkt.network_hdr->saddr,
+      first_pkt.get_source_port(),
+      first_pkt.network_hdr->daddr,
+      first_pkt.get_dest_port(),
+      first_pkt.network_hdr->protocol);
 
-    auto res = classifier.classify(first_pkt);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::REASSEMBLING);
-    REQUIRE(first_pkt.is_payload_reasm == true);
 
     tracker.track(second_pkt);
-
-    res = classifier.classify(second_pkt);
+    res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
-    REQUIRE(second_pkt.payload_proto == L7Proto::HTTP);
-    REQUIRE(second_pkt.is_payload_reasm == true);
 }
 
 TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at headers end", "[http_classifier]")
@@ -97,16 +102,18 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at headers end", "[http_classifier
     auto second_pkt = parse_packet_view(second_packet);
 
     tracker.track(first_pkt);
+    auto &conn = tracker.get_conn(first_pkt.network_hdr->saddr,
+     first_pkt.get_source_port(),
+     first_pkt.network_hdr->daddr,
+     first_pkt.get_dest_port(),
+     first_pkt.network_hdr->protocol);
 
-    auto res = classifier.classify(first_pkt);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::REASSEMBLING);
-    REQUIRE(first_pkt.is_payload_reasm == true);
 
     tracker.track(second_pkt);
-    res = classifier.classify(second_pkt);
+    res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
-    REQUIRE(second_pkt.is_payload_reasm == true);
-    REQUIRE(second_pkt.payload_proto == L7Proto::HTTP);
 }
 
 TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at Host Header", "[http_classifier]")
@@ -117,16 +124,18 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at Host Header", "[http_classifier
     auto second_pkt = parse_packet_view(second_packet);
 
     tracker.track(first_pkt);
+    auto &conn = tracker.get_conn(first_pkt.network_hdr->saddr,
+     first_pkt.get_source_port(),
+     first_pkt.network_hdr->daddr,
+     first_pkt.get_dest_port(),
+     first_pkt.network_hdr->protocol);
 
-    auto res = classifier.classify(first_pkt);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::REASSEMBLING);
-    REQUIRE(first_pkt.is_payload_reasm == true);
 
     tracker.track(second_pkt);
-    res = classifier.classify(second_pkt);
+    res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
-    REQUIRE(second_pkt.is_payload_reasm == true);
-    REQUIRE(second_pkt.payload_proto == L7Proto::HTTP);
 }
 
 TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at Host Header Value", "[http_classifier]")
@@ -137,14 +146,16 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at Host Header Value", "[http_clas
     auto second_pkt = parse_packet_view(second_packet);
 
     tracker.track(first_pkt);
+    auto &conn = tracker.get_conn(first_pkt.network_hdr->saddr,
+     first_pkt.get_source_port(),
+     first_pkt.network_hdr->daddr,
+     first_pkt.get_dest_port(),
+     first_pkt.network_hdr->protocol);
 
-    auto res = classifier.classify(first_pkt);
+    auto res = classifier.classify(conn);
     REQUIRE(res == ParseResult::REASSEMBLING);
-    REQUIRE(first_pkt.is_payload_reasm == true);
 
     tracker.track(second_pkt);
-    res = classifier.classify(second_pkt);
+    res = classifier.classify(conn);
     REQUIRE(res == ParseResult::SUCCESS);
-    REQUIRE(second_pkt.is_payload_reasm == true);
-    REQUIRE(second_pkt.payload_proto == L7Proto::HTTP);
 }

@@ -19,22 +19,17 @@
 #include <string_view>
 
 
-std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
+ParseResult Classifier::try_payload(Connection& conn)
 {
     for (const auto &classifier : classifiers_) {
-        auto res = classifier->classify(pkt, tracker_.get());
+        auto res = classifier->classify(conn);
         if (res) {
             switch (res.value()) {
             case ParseResult::SUCCESS: {
-                return { classifier->protocol() };
-            }
-            case ParseResult::SUCCESS_REASSEMBLED: {
-                pkt.is_payload_reasm = true;
-                return { classifier->protocol() };
+                return res.value();
             }
             case ParseResult::REASSEMBLING: {
-                pkt.is_payload_reasm = true;
-                return std::unexpected{ res.value() };
+                continue;
             }
             default: {
                 break;
@@ -45,7 +40,7 @@ std::expected<L7Proto, ParseResult> Classifier::try_payload(PacketView &pkt)
         }
     }
 
-    return std::unexpected{ParseResult::ERROR}; // no match for any classifier
+    return ParseResult::REASSEMBLING;
 }
 
 void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
@@ -53,14 +48,8 @@ void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
     classifiers_.emplace_back(std::move(classifier));
 }
 
-ParseResult Classifier::classify(PacketView &pkt)
+ParseResult Classifier::classify(Connection& conn)
 {
-    const auto payload_parse_res = try_payload(pkt);
-    if (payload_parse_res.has_value()) {
-        pkt.payload_proto = payload_parse_res.value();
-    } else {
-        return payload_parse_res.error();
-    }
-
-    return ParseResult::SUCCESS;
+    const auto payload_parse_res = try_payload(conn);
+    return payload_parse_res;
 }

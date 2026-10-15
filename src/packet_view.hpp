@@ -27,11 +27,6 @@ struct PacketView
     const iphdr *network_hdr{ nullptr };
     std::variant<const tcphdr *, const udphdr *> transport_hdr;
 
-    L7Proto payload_proto{ L7Proto::UNKNOWN };
-    bool is_payload_reasm{
-        false
-    };// that means payload is incomplete, complete payload is fragmented inside Connection class
-
     std::uint32_t packet_id;
 
     [[nodiscard]] std::uint16_t get_source_port() const;
@@ -58,7 +53,6 @@ struct Packet
 
     std::ptrdiff_t network_offset{0};
     std::ptrdiff_t transport_offset;
-    L7Proto payload_proto{ L7Proto::UNKNOWN };
     std::ptrdiff_t payload_offset;
 
     PacketAction action{ .packet_id = 0, .action = PacketAction::Action::SEND };

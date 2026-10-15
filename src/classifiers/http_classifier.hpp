@@ -9,9 +9,8 @@
 class Connection;
 class HttpClassifier final : public PayloadClassifier
 {
-    std::expected<ParseResult, std::string> buffer_pkt(Connection& conn, const PacketView& pkt);
 public:
-    std::expected<ParseResult, std::string> classify(const PacketView &pkt, ConnTracker& tracker) override;
+    std::expected<ParseResult, std::string> classify(Connection& conn) override;
     [[nodiscard]] constexpr L7Proto protocol() const override { return L7Proto::HTTP; }
     [[nodiscard]] static constexpr std::string_view name()
     {

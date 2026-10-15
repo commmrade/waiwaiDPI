@@ -25,17 +25,15 @@ class ConnTracker;
 class Classifier
 {
 private:
-    std::reference_wrapper<ConnTracker> tracker_;
     std::vector<std::unique_ptr<PayloadClassifier>> classifiers_;
-
-    std::expected<L7Proto, ParseResult> try_payload(PacketView &pkt);
+    ParseResult try_payload(Connection& conn);
 
 public:
-    /* explicit */ Classifier(ConnTracker& tracker) : tracker_(tracker) {}
+    /* explicit */ Classifier(ConnTracker& tracker) {}
 
     void add(std::unique_ptr<PayloadClassifier>&& classifier);
 
-    ParseResult classify(PacketView &pkt);
+    ParseResult classify(Connection& conn);
 };
 
 #endif// WAIWAIDPI_CLASSIFIER_HPP
