@@ -145,7 +145,7 @@ private:
     static int timeout_for_tcp_state(const Connection::Tcp::TcpState state);
 
 public:
-    void track(const PacketView &packet);
+    std::unordered_map<std::tuple<unsigned, unsigned short, unsigned, unsigned short, int>, Connection>::iterator track(const PacketView &packet);
     void clear_dead_connections(mnl_socket* sock, const std::uint32_t queue_num);
 
     Connection &get_conn(const std::uint32_t saddr,

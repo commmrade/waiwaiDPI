@@ -207,7 +207,7 @@ int ConnTracker::timeout_for_tcp_state(const Connection::Tcp::TcpState state)
         return DEFAULT_CONNECTION_TIMEOUT_SECS;
     }
 }
-void ConnTracker::track(const PacketView &packet)
+std::unordered_map<std::tuple<unsigned, unsigned short, unsigned, unsigned short, int>, Connection>::iterator ConnTracker::track(const PacketView &packet)
 {
     const std::tuple conn_tuple{ packet.network_hdr->saddr,
         packet.get_source_port(),
@@ -224,6 +224,10 @@ void ConnTracker::track(const PacketView &packet)
         conn_iter->second.set_source_addr(packet.network_hdr->saddr);
     }
 
+    if (conn_iter->second.is_done()) {
+        return conn_iter;
+    }
+
     conn_iter->second.track_transport(packet);
 
     if (!packet.payload.empty()) {
@@ -234,6 +238,8 @@ void ConnTracker::track(const PacketView &packet)
     conn_iter->second.update_last_packet_time(std::chrono::system_clock::now());
     conn_iter->second.set_bytes_transfered(conn_iter->second.bytes_transfered() + packet.payload.size());
     conn_iter->second.count_packet();
+
+    return conn_iter;
 }
 Connection &ConnTracker::get_conn(const std::uint32_t saddr,
     const std::uint16_t source,
@@ -264,6 +270,10 @@ void ConnTracker::clear_dead_connections(mnl_socket *sock, const std::uint32_t q
 
         auto timeout = calculate_timeout(iter->second);
         if (dur.count() >= timeout) {
+            for (const auto &pkt : iter->second.get_reasm_frags()) {
+                int ret = send_verdict(sock, queue_num, pkt.action.packet_id, NF_ACCEPT);
+                if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
+            }
             iter = conns_.erase(iter);
         } else {
             ++iter;

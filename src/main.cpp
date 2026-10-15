@@ -74,12 +74,8 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
     SPDLOG_INFO("Got a packet with id {} of size {}. {}:{} -> {}:{}", packet.packet_id, packet_len, ip_src.data(), packet.get_source_port(), ip_dst.data(), packet.get_dest_port());
 
-    ctx->tracker->track(packet);
-    auto &conn = ctx->tracker->get_conn(packet.network_hdr->saddr,
-        packet.get_source_port(),
-        packet.network_hdr->daddr,
-        packet.get_dest_port(),
-        packet.network_hdr->protocol);
+    auto conn_iter = ctx->tracker->track(packet);
+    auto &conn = conn_iter->second;
 
     auto profile_iter = ctx->profiles->find({packet.get_dest_port(), packet.network_hdr->protocol});
     assert(profile_iter != (*ctx->profiles).end());
