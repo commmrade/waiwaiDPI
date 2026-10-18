@@ -4,6 +4,7 @@
 
 #ifndef WAIWAIDPI_PROTOCOL_HPP
 #define WAIWAIDPI_PROTOCOL_HPP
+#include <cstdint>
 #include <stdexcept>
 #include <string_view>
 

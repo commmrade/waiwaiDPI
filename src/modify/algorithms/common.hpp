@@ -4,7 +4,7 @@
 
 #ifndef WAIWAIDPI_COMMON_HPP
 #define WAIWAIDPI_COMMON_HPP
-#include "packet_view.hpp"
+#include "net/packet_view.hpp"
 #include <span>
 
 bool timestamp_val_offset(Packet &packet, const int offset);

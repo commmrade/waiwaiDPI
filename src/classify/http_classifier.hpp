@@ -5,7 +5,7 @@
 #ifndef WAIWAIDPI_HTTP_CLASSIFIER_HPP
 #define WAIWAIDPI_HTTP_CLASSIFIER_HPP
 
-#include "classifier.hpp"
+#include "classify/classifier.hpp"
 
 class Connection;
 class HttpClassifier final : public PayloadClassifier

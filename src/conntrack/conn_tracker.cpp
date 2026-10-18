@@ -4,9 +4,9 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "conn_tracker.hpp"
-#include "consts.hpp"
-#include "iface.hpp"
-#include "nfq.hpp"
+#include "net/consts.hpp"
+#include "sys/iface.hpp"
+#include "sys/nfq.hpp"
 #include <cassert>
 #include <linux/netfilter.h>
 #include <netinet/ip.h>

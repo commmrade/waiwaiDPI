@@ -5,10 +5,10 @@
 #ifndef WAIWAIDPI_SPLIT_H
 #define WAIWAIDPI_SPLIT_H
 
+#include "net/packet_view.hpp"
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include "packet_view.hpp"
 #include <string>
 
 struct Position

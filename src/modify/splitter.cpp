@@ -1,124 +1,20 @@
 //
-// Created by klewy on 10/12/26.
+// Created by klewy on 9/24/26.
 //
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include "spdlog/spdlog.h"
-#include "disorder.hpp"
-#include "checksum.hpp"
+#include "splitter.hpp"
+#include "net/checksum.hpp"
 #include "algorithms/common.hpp"
 #include "algorithms/split.hpp"
-#include "args.hpp"
 #include "markers.hpp"
+#include "spdlog/spdlog.h"
 #include <arpa/inet.h>
-#include <iostream>
+#include <filesystem>
+#include <fstream>
 #include <ranges>
 
-static std::optional<std::size_t> calculate_seqovl_off(const Position &seqovl, const Markers &markers)
-{
-    const auto &pos = seqovl;
-    std::size_t ret = 0;
-
-    const auto &marks = markers;
-    if (pos.arg == Markers::HOSTSTART_STR) {
-        if (!marks.hoststart.has_value()) { return std::nullopt; }
-
-        ret = helpers::do_operation(marks.hoststart.value(), pos.operation, pos.offset);
-    } else if (pos.arg == Markers::HOSTEND_STR) {
-        if (!marks.hostend.has_value()) { return std::nullopt; }
-
-        ret = helpers::do_operation(marks.hostend.value(), pos.operation, pos.offset);
-    } else if (pos.arg == Markers::HOSTMID_STR) {
-        if (!marks.hostmid.has_value()) { return std::nullopt; }
-
-        ret = helpers::do_operation(marks.hostmid.value(), pos.operation, pos.offset);
-    } else if (pos.arg == Markers::SNIEXT_STR) {
-        if (!marks.hostend.has_value()) { return std::nullopt; }
-
-        ret = helpers::do_operation(marks.sniext.value(), pos.operation, pos.offset);
-    } else {
-        ret = pos.offset;
-    }
-
-    return ret;
-}
-
-void Disorder::seqovl(std::vector<Packet> &packets, bool handle_fake, const Connection &conn)
-{
-    const auto full_payload = concat(packets, !handle_fake);
-
-    auto markers = find_markers(full_payload, conn.payload_proto());
-    if (!markers.has_value()) {
-        SPDLOG_WARN("Was unable to find markers for seqovl");
-        return;
-    }
-
-    const auto seqovl_opt = calculate_seqovl_off(args_.seqovl.value(), markers.value());
-    if (!seqovl_opt.has_value()) {
-        SPDLOG_WARN("Could not figured out seqovl offset");
-        return;
-    }
-    const auto seqovl_num = seqovl_opt.value();
-
-    auto iter = packets.begin() + 1;
-    if (static_cast<std::size_t>(seqovl_num) >= packets.front().payload().size()) {
-        SPDLOG_WARN("Seqovl is too big");
-        return;
-    }
-
-    if (iter == packets.end()) { return; }
-
-    auto &packet = *iter;
-    const auto packet_view = parse_packet_view(packet);
-    const auto packet_pl = packet.payload();
-
-    std::vector<char> new_payload(packet.payload().size() + seqovl_num, 0);
-
-    if (args_.seqovl_pat.has_value()) {
-        std::span<char> whole{ new_payload.data(), seqovl_num };// NOLINT
-
-        while (!whole.empty()) {
-            const auto chunk_size = std::min(args_.seqovl_pat.value().size(), whole.size());
-            auto chunk = whole.subspan(0, chunk_size);
-            std::memcpy(chunk.data(), args_.seqovl_pat.value().data(), chunk_size);
-            whole = whole.subspan(chunk_size);
-        }
-    }
-
-    std::memcpy(
-        std::next(new_payload.data(), static_cast<std::ptrdiff_t>(seqovl_num)), packet_pl.data(), packet_pl.size());
-
-    auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-    auto *iph = packet.network_hdr();
-
-    const auto mss =
-        static_cast<std::size_t>(conn.get_mss()) - (iph->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcphdr));
-
-    auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_num);
-    if (new_payload.size() > mss) {
-        auto splitted = segmentize(new_payload, mss, packet, start_seq);
-
-        iter = packets.erase(iter);
-        packets.insert(iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
-    } else {
-        auto new_packet = create_packet_from(packet_view, new_payload);
-        new_packet.is_fake_blob = packet.is_fake_blob;
-        if (packet.action.action == PacketAction::Action::SEND) {
-            new_packet.action.action = PacketAction::Action::SEND;
-        } else {
-            new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
-            new_packet.action.packet_id = packet.action.packet_id;
-        }
-
-        auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());// NOLINT
-        tcp->seq = htonl(start_seq);
-        calc_packet_checksum(new_packet);
-
-        std::swap(packet, new_packet);
-    }
-}
-
-bool Disorder::check_ip(const std::vector<Packet> &packets) const
+bool Splitter::check_ip(const std::vector<Packet> &packets) const
 {
     assert(!packets.empty());
     if (args_.allowed_ips.has_value()) {
@@ -128,8 +24,7 @@ bool Disorder::check_ip(const std::vector<Packet> &packets) const
 
     return true;
 }
-
-bool Disorder::check_host(const std::vector<Packet> &packets, const Connection &conn) const
+bool Splitter::check_host(const std::vector<Packet> &packets, const Connection &conn) const
 {
     if (!args_.allowed_hosts.has_value()) { return true; }
 
@@ -149,12 +44,12 @@ bool Disorder::check_host(const std::vector<Packet> &packets, const Connection &
         marks.hostend.value() - marks.hoststart.value() };
     return args_.allowed_hosts.value().contains(std::string{ host });
 }
-void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, const Connection &conn)
+
+void Splitter::process(std::vector<Packet> &packets, const bool handle_fake, const Connection &conn)
 {
     auto filtered_packets = std::ranges::views::filter(packets, [handle_fake](const Packet &packet) {
         return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
     });
-
     if (!args_.splits.empty()) {
         std::vector<char> const full_payload = concat(packets, !handle_fake);
 
@@ -168,17 +63,8 @@ void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
     }
 
-    if (args_.seq_offset.has_value()) {
-        if (conn.get_l4_proto() == IPPROTO_TCP) {
-            for (auto &packet : filtered_packets) {
-                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                tcp->seq =
-                    htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + args_.seq_offset.value()));
-                calc_packet_checksum(packet);
-            }
-        } else {
-            SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
-        }
+    if (args_.ipv4_ttl.has_value()) {
+        for (auto &packet : filtered_packets) { packet.network_hdr()->ttl = args_.ipv4_ttl.value(); }
     }
 
     if (args_.ts_offset.has_value()) {
@@ -196,15 +82,24 @@ void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, con
         }
     }
 
-    if (args_.ipv4_ttl.has_value()) {
-        for (auto &packet : filtered_packets) { packet.network_hdr()->ttl = args_.ipv4_ttl.value(); }
-    }
-
     if (args_.seqovl.has_value()) {
         if (conn.get_l4_proto() == IPPROTO_TCP) {
             seqovl(packets, handle_fake, conn);
         } else {
             SPDLOG_WARN("Seqovl is defined but the protocol is not TCP");
+        }
+    }
+
+    if (args_.seq_offset.has_value()) {
+        if (conn.get_l4_proto() == IPPROTO_TCP) {
+            for (auto &packet : filtered_packets) {
+                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+                tcp->seq =
+                    htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + args_.seq_offset.value()));
+                calc_packet_checksum(packet);
+            }
+        } else {
+            SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
     }
 
@@ -221,7 +116,66 @@ void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, con
     }
 }
 
-void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
+void Splitter::seqovl(std::vector<Packet> &packets, bool handle_fake, const Connection &conn)
+{
+    auto iter = std::ranges::find_if(packets, [handle_fake](const Packet &packet) {
+        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+    });
+
+    if (iter == packets.end()) { return; }
+
+    auto &packet = *iter;
+    const auto packet_view = parse_packet_view(packet);
+    const auto packet_pl = packet.payload();
+
+    std::vector<char> new_payload(packet.payload().size() + static_cast<std::size_t>(args_.seqovl.value()), 0);
+
+    if (args_.seqovl_pat.has_value()) {
+        std::span<char> full_payload{ new_payload.data(), static_cast<std::size_t>(args_.seqovl.value()) };
+
+        while (!full_payload.empty()) {
+            const auto chunk_size = std::min(args_.seqovl_pat.value().size(), full_payload.size());
+            auto chunk = full_payload.subspan(0, chunk_size);
+            std::memcpy(chunk.data(), args_.seqovl_pat.value().data(), chunk_size);
+            full_payload = full_payload.subspan(chunk_size);
+        }
+    }
+
+    std::memcpy(std::next(new_payload.data(), static_cast<std::ptrdiff_t>(args_.seqovl.value())),
+        packet_pl.data(),
+        packet_pl.size());
+
+    auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
+    auto *ip = packet.network_hdr();
+
+    const auto mss =
+        static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcp));
+
+    if (new_payload.size() > mss) {
+        auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value());
+        auto splitted = segmentize(new_payload, mss, packet, start_seq);
+
+        iter = packets.erase(iter);
+        packets.insert(iter, std::make_move_iterator(splitted.begin()), std::make_move_iterator(splitted.end()));
+    } else {
+        auto new_packet = create_packet_from(packet_view, new_payload);
+        new_packet.is_fake_blob = packet.is_fake_blob;
+        if (packet.action.action == PacketAction::Action::SEND) {
+            new_packet.action.action = PacketAction::Action::SEND;
+        } else {
+            new_packet.action.action = PacketAction::Action::DROP_AND_SEND;
+            new_packet.action.packet_id = packet.action.packet_id;
+        }
+
+        auto *tcp = static_cast<tcphdr *>(new_packet.transport_hdr());// NOLINT
+        tcp->seq = htonl(ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value()));
+        calc_packet_checksum(new_packet);
+
+        std::swap(packet, new_packet);
+    }
+}
+
+void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
 {
     if (!check_ip(vec)) { return; }
     if (!check_host(vec, conn)) { return; }
@@ -236,10 +190,7 @@ void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
         std::vector<Packet> blob_packets;
         blob_packets.push_back(std::move(new_packet));
         blob_packets.front().is_fake_blob = true;
-
-        if (blob_packets.front().network_hdr()->protocol == IPPROTO_TCP) {
-            calc_packet_checksum(blob_packets.front());
-        }
+        calc_packet_checksum(blob_packets.front());
 
         process(blob_packets, true, conn);
 
@@ -250,25 +201,20 @@ void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
     } else {
         process(vec, false, conn);
     }
-
-    auto reversible = std::ranges::views::filter(vec, [handle_fake = false](const Packet &packet) {
-        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
-    });
-    std::reverse(reversible.begin(), reversible.end());// NOLINT
 }
 
-bool Disorder::matches([[maybe_unused]] const std::vector<Packet> &packets, const Connection &conn) const
+bool Splitter::matches([[maybe_unused]] const std::vector<Packet> &packets, const Connection &conn) const
 {
     if (args_.l7_payload.has_value()) { return conn.payload_proto() == args_.l7_payload.value(); }
     return true;
 }
 
-void Disorder::parse_config(const toml::table *table)
+void Splitter::parse_config(const toml::table *table)
 {
     const auto *split_node = table->get("split_at");
     if (split_node != nullptr) {
         if (!split_node->is_array()) {
-            throw std::runtime_error(std::format("split_at must be an array for '{}'", Disorder::name()));
+            throw std::runtime_error(std::format("split_at must be an array for '{}'", Splitter::name()));
         }
 
         for (const auto &node : *split_node->as_array()) {
@@ -330,7 +276,7 @@ void Disorder::parse_config(const toml::table *table)
     if (cksum_node != nullptr) {
         if (!cksum_node->is_boolean()) { throw std::runtime_error("badcksum must be a bool"); }
 
-        srand(time(nullptr));
+        srand(static_cast<unsigned int>(time(nullptr)));
         args_.badcksum = cksum_node->as_boolean()->get();
     }
 
@@ -365,14 +311,9 @@ void Disorder::parse_config(const toml::table *table)
 
     const auto *seqovl_node = table->get("seqovl");
     if (seqovl_node != nullptr) {
-        Position new_pos{};
-        if (seqovl_node->is_number()) {
-            new_pos.offset = static_cast<std::size_t>(seqovl_node->as_integer()->get());
-        } else {
-            const auto split_str = seqovl_node->as_string()->get();
-            new_pos = parse_position(split_str);
-        }
-        args_.seqovl.emplace(new_pos);
+        if (!seqovl_node->is_integer()) { throw std::runtime_error("seqovl must be an integer"); }
+
+        args_.seqovl.emplace(seqovl_node->as_integer()->get());
     }
 
     const auto *seqovl_ptrn_node = table->get("seqovl_pattern");

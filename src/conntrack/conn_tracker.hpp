@@ -4,9 +4,9 @@
 
 #ifndef WAIWAIDPI_CONN_TRACKER_HPP
 #define WAIWAIDPI_CONN_TRACKER_HPP
-#include "hash.hpp"
-#include "packet_view.hpp"
-#include "protocol.hpp"
+#include "net/packet_view.hpp"
+#include "net/protocol.hpp"
+#include "util/hash.hpp"
 #include <chrono>
 #include <cstdint>
 #include <map>

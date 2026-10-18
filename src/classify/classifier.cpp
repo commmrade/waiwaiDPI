@@ -4,16 +4,16 @@
 
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include "classifier.hpp"
-#include "conn_tracker.hpp"
-#include "modifiers/algorithms/common.hpp"
-#include <spdlog/spdlog.h>
+#include "classify/classifier.hpp"
+#include "conntrack/conn_tracker.hpp"
+#include "modify/algorithms/common.hpp"
 #include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <print>
+#include <spdlog/spdlog.h>
 
 void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
 {

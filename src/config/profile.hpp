@@ -4,10 +4,8 @@
 
 #ifndef WAIWAIDPI_PROFILE_HPP
 #define WAIWAIDPI_PROFILE_HPP
-#include "classifier.hpp"
-#include "iptables.hpp"
-#include "modifiers/modifier.hpp"
-#include "modifiers/splitter.hpp"
+#include "classify/classifier.hpp"
+#include "modify/modifier.hpp"
 #include <print>
 #include <toml++/impl/table.hpp>
 

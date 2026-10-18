@@ -3,7 +3,7 @@
 //
 
 #include "common.hpp"
-#include "checksum.hpp"
+#include "net/checksum.hpp"
 #include <algorithm>
 #include <cassert>
 #include <stdexcept>

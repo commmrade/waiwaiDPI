@@ -5,8 +5,8 @@
 #ifndef WAIWAIDPI_CLASSIFIER_HPP
 #define WAIWAIDPI_CLASSIFIER_HPP
 
-#include "packet_view.hpp"
-#include "protocol.hpp"
+#include "net/packet_view.hpp"
+#include "net/protocol.hpp"
 #include <expected>
 #include <memory>
 #include <netinet/ip.h>

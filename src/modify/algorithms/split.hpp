@@ -4,11 +4,10 @@
 
 #ifndef WAIWAIDPI_SPLIT_HPP
 #define WAIWAIDPI_SPLIT_HPP
-#include "conn_tracker.hpp"
-#include "packet_view.hpp"
-#include "modifiers/args.hpp"
+#include "conntrack/conn_tracker.hpp"
+#include "net/packet_view.hpp"
+#include "modify/args.hpp"
 #include <expected>
-#include <unordered_set>
 #include <vector>
 
 namespace split {

@@ -5,8 +5,8 @@
 #ifndef WAIWAIDPI_MODIFIER_HPP
 #define WAIWAIDPI_MODIFIER_HPP
 
-#include "conn_tracker.hpp"
-#include "packet_view.hpp"
+#include "conntrack/conn_tracker.hpp"
+#include "net/packet_view.hpp"
 #include <toml++/impl/table.hpp>
 #include <vector>
 

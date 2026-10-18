@@ -1,12 +1,10 @@
-#include "classifier.hpp"
-#include "conn_tracker.hpp"
-
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include "classify/classifier.hpp"
+#include "conntrack/conn_tracker.hpp"
 #include "argh.h"
-#include "consts.hpp"
-#include "iptables.hpp"
-#include "nfq.hpp"
-#include "profile.hpp"
+#include "config/profile.hpp"
+#include "sys/iptables.hpp"
+#include "net/consts.hpp"
+#include "sys/nfq.hpp"
 #include <arpa/inet.h>
 #include <cassert>
 #include <csignal>
@@ -22,8 +20,9 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <print>
-#include <spdlog/spdlog.h>
 #include <toml++/toml.hpp>
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include <spdlog/spdlog.h>
 
 struct Context
 {

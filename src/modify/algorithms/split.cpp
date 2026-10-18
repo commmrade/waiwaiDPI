@@ -2,16 +2,16 @@
 // Created by klewy on 9/24/26.
 //
 
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include <spdlog/spdlog.h>
 #include "split.hpp"
-#include "checksum.hpp"
-#include "modifiers/markers.hpp"
+#include "net/checksum.hpp"
+#include "modify/markers.hpp"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <print>
 #include <ranges>
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include <spdlog/spdlog.h>
 
 namespace helpers {
 

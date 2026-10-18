@@ -5,7 +5,7 @@
 #ifndef WAIWAIDPI_TLS_CLASSIFIER_HPP
 #define WAIWAIDPI_TLS_CLASSIFIER_HPP
 
-#include "classifier.hpp"
+#include "classify/classifier.hpp"
 
 class Connection;
 class TlsHandshakeClassifier final : public PayloadClassifier

@@ -2,7 +2,9 @@
 // Created by klewy on 9/21/26.
 //
 
-#include "iptables.hpp"
+#include "sys/iptables.hpp"
+
+#include <cstring>
 
 void close_pipe(FILE *pipe) { pclose(pipe); }
 

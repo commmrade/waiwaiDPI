@@ -4,9 +4,7 @@
 
 #ifndef WAIWAIDPI_IPTABLES_HPP
 #define WAIWAIDPI_IPTABLES_HPP
-#include <cstring>
 #include <memory>
-#include <stdexcept>
 #include <stdio.h>
 #include <string_view>
 

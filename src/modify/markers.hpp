@@ -4,11 +4,11 @@
 
 #ifndef WAIWAIDPI_MARKERS_HPP
 #define WAIWAIDPI_MARKERS_HPP
+#include "net/protocol.hpp"
 #include <cstdint>
+#include <expected>
 #include <optional>
 #include <span>
-#include "protocol.hpp"
-#include <expected>
 
 struct Markers
 {
