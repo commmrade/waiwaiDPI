@@ -59,6 +59,14 @@ void Connection::set_mss(const int mss)
     }
 }
 void Connection::reset_reasm() { reasm_.frags.clear(); }
+
+void Connection::insert_reasm_frag(const PacketView &pkt)
+{
+    reasm_.frags.push_back(create_packet(pkt));
+    sort_reasm();
+    // segments are in order at this point (IF TCP)
+}
+
 void Connection::sort_reasm()
 {
     if (get_l4_proto() == IPPROTO_TCP) {
@@ -75,6 +83,15 @@ void Connection::sort_reasm()
     } else {
         throw std::logic_error{ "sort Not supported for anything other than tcp" };
     }
+}
+
+void Connection::track(const PacketView &packet)
+{
+    track_transport(packet);
+
+    update_last_packet_time(std::chrono::system_clock::now());
+    set_bytes_transfered(bytes_transfered() + packet.payload.size());
+    count_packet();
 }
 
 void Connection::track_transport(const PacketView &packet)
@@ -207,47 +224,29 @@ int ConnTracker::timeout_for_tcp_state(const Connection::Tcp::TcpState state)
         return DEFAULT_CONNECTION_TIMEOUT_SECS;
     }
 }
-std::unordered_map<std::tuple<unsigned, unsigned short, unsigned, unsigned short, int>, Connection>::iterator ConnTracker::track(const PacketView &packet)
+
+std::unordered_map<std::tuple<unsigned, unsigned short, unsigned, unsigned short, int>, Connection>::iterator ConnTracker::get_conn(const std::uint32_t saddr,
+    const std::uint16_t source,
+    const std::uint32_t daddr,
+    const std::uint16_t dest,
+    const int proto)
 {
-    const std::tuple conn_tuple{ packet.network_hdr->saddr,
-        packet.get_source_port(),
-        packet.network_hdr->daddr,
-        packet.get_dest_port(),
-        packet.network_hdr->protocol };
+    const std::tuple conn_tuple{ saddr,
+        source,
+        daddr,
+        dest,
+        proto };
 
     auto conn_iter = conns_.find(conn_tuple);
     if (conn_iter == conns_.end()) {
         auto [iter, inserted] = conns_.emplace(conn_tuple, Connection{});
         assert(inserted);
         conn_iter = iter;
-        conn_iter->second.set_l4_proto(packet.network_hdr->protocol);
-        conn_iter->second.set_source_addr(packet.network_hdr->saddr);
+        conn_iter->second.set_l4_proto(static_cast<std::uint8_t>(proto));
+        conn_iter->second.set_source_addr(saddr);
     }
-
-    if (conn_iter->second.is_done()) {
-        return conn_iter;
-    }
-
-    conn_iter->second.track_transport(packet);
-
-    if (!packet.payload.empty()) {
-        conn_iter->second.add_reasm_frag(packet);
-        conn_iter->second.sort_reasm();
-    }
-
-    conn_iter->second.update_last_packet_time(std::chrono::system_clock::now());
-    conn_iter->second.set_bytes_transfered(conn_iter->second.bytes_transfered() + packet.payload.size());
-    conn_iter->second.count_packet();
 
     return conn_iter;
-}
-Connection &ConnTracker::get_conn(const std::uint32_t saddr,
-    const std::uint16_t source,
-    const std::uint32_t daddr,
-    const std::uint16_t dest,
-    const int proto)
-{
-    return conns_.at({ saddr, source, daddr, dest, proto });
 }
 
 void ConnTracker::clear_dead_connections(mnl_socket *sock, const std::uint32_t queue_num)

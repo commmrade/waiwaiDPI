@@ -26,20 +26,15 @@ TEST_CASE_METHOD(DisorderTestFixture, "Reordering works", "[disorder_modifier]")
     )toml";
     build_disorder(config);
 
-    std::vector<Packet> packets;
+
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    conn_iter->second.track(packet_1_view);
+    auto res = classifier.classify(conn_iter->second.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
-    modifier.modify(packets, conn);
+    std::vector<Packet> packets = conn_iter->second.get_reasm_frags();
+    modifier.modify(packets, conn_iter->second);
     REQUIRE(packets.size() == 2);
 
     auto old_seq = std::numeric_limits<std::uint32_t>::max();
@@ -70,21 +65,15 @@ TEST_CASE_METHOD(DisorderTestFixture, "Seqovl works correctly if smaller than th
     )toml";
     build_disorder(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    conn.set_mss(1800);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    conn_iter->second.track(packet_1_view);
+    conn_iter->second.set_mss(1800);
+    auto res = classifier.classify(conn_iter->second.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
-    modifier.modify(packets, conn);
+    auto packets = conn_iter->second.get_reasm_frags();
+    modifier.modify(packets, conn_iter->second);
     REQUIRE(packets.size() == 2);
 
     auto* back_tcp = static_cast<tcphdr*>(packets.back().transport_hdr());
@@ -113,20 +102,15 @@ TEST_CASE_METHOD(DisorderTestFixture, "Seqovl works correctly if bigger than the
     )toml";
     build_disorder(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
     conn.set_mss(1800);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
+    auto packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
@@ -136,6 +120,7 @@ TEST_CASE_METHOD(DisorderTestFixture, "Seqovl works correctly if bigger than the
     std::array<char, 100> zero_arr{};
     REQUIRE_FALSE(std::memcmp(packets.front().payload().data(), zero_arr.data(), zero_arr.size()) == 0);
 }
+
 
 static std::vector<char> get_file(const std::filesystem::path& path)
 {
@@ -169,20 +154,15 @@ TEST_CASE_METHOD(DisorderTestFixture, "Fake blob is not reversed", "[disorder_mo
     )toml";
     build_disorder(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
     conn.set_mss(1800);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
+    auto packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
@@ -227,28 +207,24 @@ TEST_CASE_METHOD(DisorderTestFixture, "Host check works on original data, not fa
     PacketView pkt_2 = parse_packet_view(part_2_view);
     PacketView pkt_3 = parse_packet_view(part_3_view);
 
-
-
-    tracker.track(pkt_1);
-    auto &conn = tracker.get_conn(pkt_1.network_hdr->saddr,
-        pkt_1.get_source_port(),
-        pkt_1.network_hdr->daddr,
-        pkt_1.get_dest_port(),
-        pkt_1.network_hdr->protocol);
+    auto conn_iter = tracker.get_conn(pkt_1.network_hdr->saddr, pkt_1.get_source_port(), pkt_1.network_hdr->daddr, pkt_1.get_dest_port(), pkt_1.network_hdr->protocol);
+    auto& conn = conn_iter->second;
     conn.set_mss(1800);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::REASSEMBLING);
 
-    tracker.track(pkt_2);
-    res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::REASSEMBLING);
+    conn.track(pkt_1);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
-    tracker.track(pkt_3);
-    res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    conn.track(pkt_2);
+    res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
+    conn.track(pkt_3);
+    res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
-    std::vector<Packet> packets = conn.get_reasm_frags();
+    auto packets = conn.get_reasm_frags();
     conn.reset_reasm();
 
     modifier.modify(packets, conn);

@@ -71,19 +71,27 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     std::array<char, INET_ADDRSTRLEN> ip_dst{};
     inet_ntop(AF_INET, &packet.network_hdr->saddr, ip_src.data(), ip_src.size());
     inet_ntop(AF_INET, &packet.network_hdr->daddr, ip_dst.data(), ip_dst.size());
-
     SPDLOG_INFO("Got a packet with id {} of size {}. {}:{} -> {}:{}", packet.packet_id, packet_len, ip_src.data(), packet.get_source_port(), ip_dst.data(), packet.get_dest_port());
 
-    auto conn_iter = ctx->tracker->track(packet);
-    auto &conn = conn_iter->second;
+    auto conn_iter = ctx->tracker->get_conn(packet.network_hdr->saddr, packet.get_source_port(), packet.network_hdr->daddr, packet.get_dest_port(), packet.network_hdr->protocol);
+    conn_iter->second.track(packet);
 
-    auto profile_iter = ctx->profiles->find({packet.get_dest_port(), packet.network_hdr->protocol});
-    assert(profile_iter != (*ctx->profiles).end());
-    auto& profile = profile_iter->second;
+    if (!packet.payload.empty() && !conn_iter->second.is_done()) {
+        std::println("CONNECTION MSS IS: {}", conn_iter->second.get_mss());
+        auto& conn = conn_iter->second;
 
-    if (!packet.payload.empty() && !conn.is_done()) {
-        auto res = profile.classifier.classify(conn);
-        if (res == ParseResult::SUCCESS) {
+        auto profile_iter = ctx->profiles->find({packet.get_dest_port(), packet.network_hdr->protocol});
+        assert(profile_iter != (*ctx->profiles).end());
+        auto& profile = profile_iter->second;
+
+        conn.insert_reasm_frag(packet);
+        const auto& packets_to_classify = conn.get_reasm_frags();
+
+        assert(!packets_to_classify.empty());
+        auto res = profile.classifier.classify(packets_to_classify);
+        if (res.first == ClassifyResult::DONE) {
+            conn.set_payload_proto(res.second.value());
+
             std::vector<Packet> packets;
             const std::vector<Packet> frags = conn.get_reasm_frags();
             conn.reset_reasm();
@@ -93,6 +101,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 packets.emplace_back(frag);
             }
 
+            assert(!packets.empty());
             profile.modifier.modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
@@ -141,13 +150,14 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
                 }
             }
+            conn.set_done(true);
+        } else if (res.first == ClassifyResult::REASSEMBLING) {
+            // Nothing for now
         } else {
-            if (conn.get_reasm_frags().size() >= Connection::MAX_REASM_SEGMENTS()) {
-                conn.set_done(true);
-                for (const auto &pkt : conn.get_reasm_frags()) {
-                    int ret = send_verdict(ctx->sock, ctx->queue_number, pkt.action.packet_id, NF_ACCEPT);
-                    if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
-                }
+            conn.set_done(true); // if error that means it probably won't be correctly classified, so just drop
+            for (const auto &pkt : conn.get_reasm_frags()) {
+                int ret = send_verdict(ctx->sock, ctx->queue_number, pkt.action.packet_id, NF_ACCEPT);
+                if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
             }
         }
     } else {

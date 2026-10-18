@@ -26,19 +26,15 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split for HTTP works", "[splitter_
     )toml";
     build_http_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
     REQUIRE(packets.front().payload().size() == 2);
@@ -47,7 +43,6 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split for HTTP works", "[splitter_
     REQUIRE(packets.front().action.action == PacketAction::Action::DROP_AND_SEND);
     REQUIRE(packets.back().action.action == PacketAction::Action::SEND);
 }
-
 
 TEST_CASE_METHOD(SplitterTestFixture, "Split at Header for HTTP works", "[splitter_modifier]")
 {
@@ -65,19 +60,15 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at Header for HTTP works", "[splitt
     )toml";
     build_http_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
@@ -87,7 +78,6 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at Header for HTTP works", "[splitt
     REQUIRE(std::string_view{packets.front().payload()}.find("httpforever.com") == std::string_view::npos);
     REQUIRE(std::string_view{packets.back().payload()}.find("httpforever.com") == std::string_view::npos);
 }
-
 
 TEST_CASE_METHOD(SplitterTestFixture, "Split at HEaDeR for HTTP works", "[splitter_modifier]")
 {
@@ -105,19 +95,15 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at HEaDeR for HTTP works", "[splitt
     )toml";
     build_http_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_case_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
@@ -145,17 +131,14 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for HTTP works", "[splitte
     build_http_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 3);
     REQUIRE(packets.front().payload().size() == 2);

@@ -9,7 +9,8 @@
 #include "modifiers/disorder.hpp"
 #include "modifiers/modifier.hpp"
 #include "modifiers/splitter.hpp"
-
+#include "classifiers/http_classifier.hpp"
+#include "classifiers/tls_classifier.hpp"
 #include <print>
 #include <toml++/impl/parser.hpp>
 #include <toml++/impl/table.hpp>

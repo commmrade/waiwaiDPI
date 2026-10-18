@@ -41,10 +41,6 @@ std::expected<Markers, std::string> find_markers_tls(std::span<const char> paylo
     Markers ret;
     // it is guaranteed to be a tls handshake (because of the classifier), nothing else is guaranteed besides that
     constexpr auto tls_handshake_type = 0x16;
-    assert(payload.size() >= 5);
-    assert(payload[0] == tls_handshake_type);
-    assert(payload[1] == 0x03 && (payload[2] == 0x03 || payload[2] == 0x01));
-
     const auto initial = payload;
 
     // content stuff

@@ -93,11 +93,12 @@ public:
 
     void reset_reasm();
 
-    void add_reasm_frag(const PacketView& pkt) { reasm_.frags.emplace_back(create_packet(pkt)); }
-    void add_reasm_frag(const Packet& pkt) { reasm_.frags.emplace_back(pkt); }
+    void insert_reasm_frag(const PacketView& pkt);
     void sort_reasm();
 
     [[nodiscard]] const std::vector<Packet> &get_reasm_frags() const { return reasm_.frags; }
+
+    void track(const PacketView &packet);
 
     [[nodiscard]] std::size_t bytes_transfered() const { return pl_bytes_transfered_; }
     void set_bytes_transfered(const std::size_t bytes) { pl_bytes_transfered_ = bytes; }
@@ -145,14 +146,14 @@ private:
     static int timeout_for_tcp_state(const Connection::Tcp::TcpState state);
 
 public:
-    std::unordered_map<std::tuple<unsigned, unsigned short, unsigned, unsigned short, int>, Connection>::iterator track(const PacketView &packet);
     void clear_dead_connections(mnl_socket* sock, const std::uint32_t queue_num);
 
-    Connection &get_conn(const std::uint32_t saddr,
+    std::unordered_map<std::tuple<unsigned, unsigned short, unsigned, unsigned short, int>, Connection>::iterator get_conn(const std::uint32_t saddr,
         const std::uint16_t source,
         const std::uint32_t daddr,
         const std::uint16_t dest,
         const int proto);
+
     std::size_t count() const
     {
         return conns_.size();

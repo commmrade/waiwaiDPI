@@ -10,19 +10,19 @@
 #include <cstring>
 #include <print>
 
-std::expected<ParseResult, std::string> TlsHandshakeClassifier::classify(const std::vector<char>& payload, Connection& conn)
+std::expected<ClassifyResult, std::string> TlsHandshakeClassifier::classify(const std::vector<char>& payload)
 {
     constexpr auto TLS_HDR_LEN = 5;
     if (payload.size() < TLS_HDR_LEN) {
         // Don't do conn.set_done(true) here, because it can get here when the host sends a SYN[/ACK]packet
-        return {ParseResult::REASSEMBLING};
+        return std::unexpected{"Could not classify as TLS because packet is too small"};
     }
     constexpr auto TLS_HANDSHAKE_TYPE = 0x16;
     constexpr auto TLS_VERSION_MAJOR = 0x03;
 
     if (payload[0] != TLS_HANDSHAKE_TYPE || payload[1] != TLS_VERSION_MAJOR
         || (payload[2] != 0x01 && payload[2] != 0x03)) {
-        return {ParseResult::REASSEMBLING};
+        return std::unexpected{"Could not classify as TLS because packet header is not TLS"};
     }
 
     std::uint16_t tls_len{};
@@ -30,11 +30,8 @@ std::expected<ParseResult, std::string> TlsHandshakeClassifier::classify(const s
     tls_len = ntohs(tls_len);
 
     if (payload.size() < tls_len + TLS_HDR_LEN) { // fragmented
-        return {ParseResult::REASSEMBLING};
+        return {ClassifyResult::REASSEMBLING};
     }
 
-    conn.set_payload_proto(L7Proto::TLS);
-
-    conn.set_done(true);
-    return { ParseResult::SUCCESS };
+    return {ClassifyResult::DONE};
 }

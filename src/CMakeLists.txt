@@ -15,7 +15,6 @@ add_executable(main main.cpp
         packet_view.cpp
         classifiers/http_classifier.cpp
         classifiers/http_classifier.hpp
-        classifiers/payload_classifier.hpp
         classifiers/tls_classifier.cpp
         classifiers/tls_classifier.hpp
         modifiers/modifier.hpp

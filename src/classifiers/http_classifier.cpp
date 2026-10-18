@@ -10,7 +10,7 @@
 #include "../packet_view.hpp"
 #include <netinet/in.h>
 
-std::expected<ParseResult, std::string> HttpClassifier::classify(const std::vector<char>& payload, Connection& conn)
+std::expected<ClassifyResult, std::string> HttpClassifier::classify(const std::vector<char>& payload)
 {
     std::string_view payload_str{ payload };
     // First, try to find \r\n (the status line)
@@ -30,10 +30,9 @@ std::expected<ParseResult, std::string> HttpClassifier::classify(const std::vect
     std::string_view const full_req{ payload };
     const auto header_end_pos = full_req.find("\r\n\r\n");
     if (header_end_pos == std::string_view::npos) {
-        return { ParseResult::REASSEMBLING };
+        return { ClassifyResult::REASSEMBLING };
     }
     // TODO: i guess it is not entirelty correct
 
-    conn.set_payload_proto(L7Proto::HTTP);
-    return {ParseResult::SUCCESS};
+    return {ClassifyResult::DONE};
 }

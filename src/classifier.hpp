@@ -5,9 +5,7 @@
 #ifndef WAIWAIDPI_CLASSIFIER_HPP
 #define WAIWAIDPI_CLASSIFIER_HPP
 
-#include "classifiers/http_classifier.hpp"
-#include "classifiers/payload_classifier.hpp"
-#include "classifiers/tls_classifier.hpp"
+#include <toml++/toml.hpp>
 #include "packet_view.hpp"
 #include "protocol.hpp"
 #include <cstdint>
@@ -22,18 +20,43 @@
 #include <vector>
 
 class ConnTracker;
+
+enum class ClassifyResult : std::uint8_t
+{
+    DONE,
+    REASSEMBLING,
+    ERROR,
+};
+
+struct PacketView;
+enum class ParseResult : std::uint8_t
+{
+    ERROR,
+    REASSEMBLING,
+    SUCCESS
+};
+
+class PayloadClassifier //NOLINT
+{
+public:
+    virtual ~PayloadClassifier() = default;
+    virtual std::expected<ClassifyResult, std::string> classify(const std::vector<char>& full_payload) = 0;
+
+    virtual void parse_config([[maybe_unused]] const toml::table* table) {}
+    [[nodiscard]] virtual constexpr L7Proto protocol() const = 0;
+    // [[nodiscard]] virtual constexpr std::string_view name() const = 0;
+};
+
 class Classifier
 {
 private:
     std::vector<std::unique_ptr<PayloadClassifier>> classifiers_;
-    ParseResult try_payload(Connection& conn);
-
 public:
     /* explicit */ Classifier(ConnTracker& tracker) {}
 
     void add(std::unique_ptr<PayloadClassifier>&& classifier);
 
-    ParseResult classify(Connection& conn);
+    std::pair<ClassifyResult, std::optional<L7Proto>> classify(const std::vector<Packet>& packets);
 };
 
 #endif// WAIWAIDPI_CLASSIFIER_HPP

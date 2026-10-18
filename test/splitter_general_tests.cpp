@@ -24,19 +24,14 @@ TEST_CASE_METHOD(SplitterTestFixture, "Bad Checksum parameter", "[splitter_modif
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
@@ -50,6 +45,8 @@ TEST_CASE_METHOD(SplitterTestFixture, "Bad Checksum parameter", "[splitter_modif
         REQUIRE(cksum != tcp->check);
     }
 }
+
+
 
 TEST_CASE_METHOD(SplitterTestFixture, "Sequence offset parameter", "[splitter_modifier]")
 {
@@ -68,18 +65,14 @@ TEST_CASE_METHOD(SplitterTestFixture, "Sequence offset parameter", "[splitter_mo
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
+    std::vector<Packet> packets = conn.get_reasm_frags();
 
     auto* tcp = static_cast<tcphdr*>(packets.front().transport_hdr());
     auto start_seq = ntohl(tcp->seq) - 1000;
@@ -93,6 +86,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Sequence offset parameter", "[splitter_mo
         start_seq += packet.payload().size();
     }
 }
+
 
 static std::optional<std::uint32_t> get_ts_val(const Packet &packet)
 {
@@ -149,18 +143,14 @@ TEST_CASE_METHOD(SplitterTestFixture, "Timestamp offset parameter", "[splitter_m
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
+    std::vector<Packet> packets = conn.get_reasm_frags();
 
     auto original_ts = get_ts_val(packets.front());
     REQUIRE(original_ts.has_value());// test fixture packet must carry a TS option
@@ -192,18 +182,14 @@ TEST_CASE_METHOD(SplitterTestFixture, "IPv4 TTL parameter", "[splitter_modifier]
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
+    std::vector<Packet> packets = conn.get_reasm_frags();
 
     auto *ip = static_cast<iphdr *>(packets.front().network_hdr());
     auto original_ttl = ip->ttl;
@@ -237,18 +223,14 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob priority over original data", "[spli
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
+    std::vector<Packet> packets = conn.get_reasm_frags();
 
     auto *ip = static_cast<iphdr *>(packets.front().network_hdr());
     auto original_ttl = ip->ttl;
@@ -265,7 +247,6 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob priority over original data", "[spli
 
 TEST_CASE_METHOD(SplitterTestFixture, "Blob and original data are affected by separate modifiers", "[splitter_modifier]")
 {
-
     constexpr std::string_view config = R"toml(
     [profile.1]
     port = 443
@@ -285,18 +266,14 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob and original data are affected by se
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
+    std::vector<Packet> packets = conn.get_reasm_frags();
 
     auto *ip = static_cast<iphdr *>(packets.front().network_hdr());
     auto original_ttl = ip->ttl;
@@ -332,21 +309,16 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for fake blob", "[splitter_modifie
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
     conn.set_mss(1440);
 
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
@@ -378,26 +350,21 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for original data", "[splitter_mod
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
     conn.set_mss(1800);
 
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
-    const auto& front_pkt = packets.back();
-    const auto payload = front_pkt.payload();
+    const auto& back_pkt = packets.back();
+    const auto payload = back_pkt.payload();
 
     const std::array<char, 100> zeros{};
 
@@ -425,21 +392,16 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for both fake and original data", 
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
     conn.set_mss(1800);
 
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
 
@@ -469,21 +431,16 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl segmentation", "[splitter_modifier
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
     conn.set_mss(1571 + 24); // payload is 1571 bytes
 
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 3);
 
@@ -523,20 +480,17 @@ TEST_CASE_METHOD(SplitterTestFixture, "Host check works on original data, not fa
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
     conn.set_mss(1800);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
 
-    packets.push_back(create_packet(packet_1_view));
+    auto res = classifier.classify(conn.get_reasm_frags());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
+    std::vector<Packet> packets = conn.get_reasm_frags();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 3);
 }

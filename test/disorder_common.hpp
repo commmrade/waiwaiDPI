@@ -8,6 +8,7 @@
 #include "../src/conn_tracker.hpp"
 #include "../src/modifiers/disorder.hpp"
 #include "../src/modifiers/modifier.hpp"
+#include "../src/classifiers/tls_classifier.hpp"
 #include <catch2/catch_all.hpp>
 #include <toml++/impl/parser.hpp>
 

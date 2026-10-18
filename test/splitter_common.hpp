@@ -7,6 +7,8 @@
 
 #include "../src/checksum.hpp"
 #include "../src/modifiers/splitter.hpp"
+#include "../src/classifiers/http_classifier.hpp"
+#include "../src/classifiers/tls_classifier.hpp"
 #include "common.hpp"
 
 #include <catch2/catch_all.hpp>

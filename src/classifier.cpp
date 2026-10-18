@@ -20,19 +20,25 @@
 #include <print>
 #include <string_view>
 
-
-ParseResult Classifier::try_payload(Connection& conn)
+void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
 {
-    const auto full_payload = concat(conn.get_reasm_frags());
+    classifiers_.emplace_back(std::move(classifier));
+}
 
+std::pair<ClassifyResult, std::optional<L7Proto>> Classifier::classify(const std::vector<Packet>& packets)
+{
+    const auto full_payload = concat(packets);
+
+    int reasm_counter = 0;
     for (const auto &classifier : classifiers_) {
-        auto res = classifier->classify(full_payload, conn);
+        auto res = classifier->classify(full_payload);
         if (res) {
             switch (res.value()) {
-            case ParseResult::SUCCESS: {
-                return res.value();
+            case ClassifyResult::DONE: {
+                return {ClassifyResult::DONE, {classifier->protocol() }};
             }
-            case ParseResult::REASSEMBLING: {
+            case ClassifyResult::REASSEMBLING: {
+                ++reasm_counter;
                 continue;
             }
             default: {
@@ -44,16 +50,9 @@ ParseResult Classifier::try_payload(Connection& conn)
         }
     }
 
-    return ParseResult::REASSEMBLING;
-}
+    if (reasm_counter) {
+        return {ClassifyResult::REASSEMBLING, std::nullopt};
+    }
 
-void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
-{
-    classifiers_.emplace_back(std::move(classifier));
-}
-
-ParseResult Classifier::classify(Connection& conn)
-{
-    const auto payload_parse_res = try_payload(conn);
-    return payload_parse_res;
+    return {ClassifyResult::ERROR, std::nullopt};
 }
