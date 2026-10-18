@@ -3,8 +3,8 @@
 //
 
 #include "packet_view.hpp"
-
 #include <cstring>
+#include <stdexcept>
 
 std::uint16_t PacketView::get_source_port() const
 {
@@ -81,12 +81,13 @@ Packet create_packet(const PacketView &view)
     pkt.transport_offset = iph->ihl * 4;
     switch (iph->protocol) {
     case IPPROTO_TCP: {
-        const auto* tcp = reinterpret_cast<const tcphdr*>(std::next(pkt.packet.data(), pkt.transport_offset));
+        const auto *tcp = reinterpret_cast<const tcphdr *>(std::next(pkt.packet.data(), pkt.transport_offset));
         pkt.payload_offset = (iph->ihl * 4) + (tcp->doff * 4);
         break;
     }
     case IPPROTO_UDP: {
-        const auto *udph = reinterpret_cast<const udphdr *>(std::next(pkt.packet.data(), pkt.transport_offset));// NOLINT
+        const auto *udph =
+            reinterpret_cast<const udphdr *>(std::next(pkt.packet.data(), pkt.transport_offset));// NOLINT
         pkt.payload_offset = (iph->ihl * 4) + sizeof(udphdr);
         break;
     }
@@ -96,18 +97,18 @@ Packet create_packet(const PacketView &view)
     }
 
     pkt.action.packet_id = view.packet_id;
-    if (pkt.action.packet_id) {
-        pkt.action.action = PacketAction::Action::ACCEPT;
-    }
+    if (pkt.action.packet_id) { pkt.action.action = PacketAction::Action::ACCEPT; }
 
     return pkt;
 }
 
-Packet create_packet_from(const PacketView& pkt, std::span<const char> new_payload) {
+Packet create_packet_from(const PacketView &pkt, std::span<const char> new_payload)
+{
     Packet res = create_packet(pkt);
     res.packet.resize(static_cast<std::size_t>(res.payload_offset) + new_payload.size());
     std::memcpy(std::next(res.packet.data(), res.payload_offset), new_payload.data(), new_payload.size());
-    res.network_hdr()->tot_len = htons(static_cast<std::uint16_t>(pkt.network_hdr->ihl * 4 + pkt.transport_hdr_len() + new_payload.size()));
+    res.network_hdr()->tot_len =
+        htons(static_cast<std::uint16_t>(pkt.network_hdr->ihl * 4 + pkt.transport_hdr_len() + new_payload.size()));
     return res;
 }
 
@@ -152,11 +153,11 @@ PacketView parse_packet_view(const Packet &packet)
 
     switch (pkt.network_hdr->protocol) {
     case IPPROTO_TCP: {
-        pkt.transport_hdr.emplace<const tcphdr *>(static_cast<const tcphdr*>(packet.transport_hdr()));
+        pkt.transport_hdr.emplace<const tcphdr *>(static_cast<const tcphdr *>(packet.transport_hdr()));
         break;
     }
     case IPPROTO_UDP: {
-        pkt.transport_hdr.emplace<const udphdr *>(static_cast<const udphdr*>(packet.transport_hdr()));
+        pkt.transport_hdr.emplace<const udphdr *>(static_cast<const udphdr *>(packet.transport_hdr()));
         break;
     }
     default: {

@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <string_view>
 
-enum class L7Proto
+enum class L7Proto : std::uint8_t
 {
     UNKNOWN, // Unknown payload, but packets may be modified
     EMPTY,

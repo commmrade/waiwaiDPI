@@ -5,44 +5,32 @@
 #ifndef WAIWAIDPI_CLASSIFIER_HPP
 #define WAIWAIDPI_CLASSIFIER_HPP
 
-#include <toml++/toml.hpp>
 #include "packet_view.hpp"
 #include "protocol.hpp"
-#include <cstdint>
 #include <expected>
 #include <memory>
 #include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
-#include <span>
-#include <stdexcept>
-#include <variant>
+#include <toml++/toml.hpp>
 #include <vector>
 
 class ConnTracker;
 
-enum class ClassifyResult : std::uint8_t
-{
+enum class ClassifyResult : std::uint8_t {
     DONE,
     REASSEMBLING,
     ERROR,
 };
 
 struct PacketView;
-enum class ParseResult : std::uint8_t
-{
-    ERROR,
-    REASSEMBLING,
-    SUCCESS
-};
+enum class ParseResult : std::uint8_t { ERROR, REASSEMBLING, SUCCESS };
 
-class PayloadClassifier //NOLINT
+class PayloadClassifier// NOLINT
 {
 public:
     virtual ~PayloadClassifier() = default;
-    virtual std::expected<ClassifyResult, std::string> classify(const std::vector<char>& full_payload) = 0;
+    virtual std::expected<ClassifyResult, std::string> classify(const std::vector<char> &full_payload) = 0;
 
-    virtual void parse_config([[maybe_unused]] const toml::table* table) {}
+    virtual void parse_config([[maybe_unused]] const toml::table *table) {}
     [[nodiscard]] virtual constexpr L7Proto protocol() const = 0;
     // [[nodiscard]] virtual constexpr std::string_view name() const = 0;
 };
@@ -51,12 +39,13 @@ class Classifier
 {
 private:
     std::vector<std::unique_ptr<PayloadClassifier>> classifiers_;
+
 public:
     Classifier() = default;
 
-    void add(std::unique_ptr<PayloadClassifier>&& classifier);
+    void add(std::unique_ptr<PayloadClassifier> &&classifier);
 
-    std::pair<ClassifyResult, std::optional<L7Proto>> classify(const std::vector<Packet>& packets);
+    std::pair<ClassifyResult, std::optional<L7Proto>> classify(const std::vector<Packet> &packets);
 };
 
 #endif// WAIWAIDPI_CLASSIFIER_HPP

@@ -5,9 +5,8 @@
 #ifndef WAIWAIDPI_MODIFIER_HPP
 #define WAIWAIDPI_MODIFIER_HPP
 
-#include "../conn_tracker.hpp"
-#include "../packet_view.hpp"
-#include <cstring>
+#include "conn_tracker.hpp"
+#include "packet_view.hpp"
 #include <toml++/impl/table.hpp>
 #include <vector>
 
@@ -15,21 +14,22 @@ class IModifier
 {
 public:
     virtual ~IModifier() = default;
-    virtual void modify(std::vector<Packet>& vec, const Connection& conn) = 0; // true - successfully processed, false - did nothing
-    [[nodiscard]] virtual bool matches(const std::vector<Packet>& packets, const Connection& conn) const = 0; // used to make sure that these packets can be processed by this modifier
-    virtual void parse_config([[maybe_unused]] const toml::table* table) {}
+
+    virtual void modify(std::vector<Packet> &vec,
+        const Connection &conn) = 0;// true - successfully processed, false - did nothing
+    [[nodiscard]] virtual bool matches(const std::vector<Packet> &packets,
+        const Connection &conn) const = 0;// used to make sure that these packets can be processed by this modifier
+    virtual void parse_config([[maybe_unused]] const toml::table *table) {}
     // [[nodiscard]] virtual constexpr std::string_view name() const = 0;
 };
 
 class Modifier
 {
     std::vector<std::unique_ptr<IModifier>> modifiers_;
+
 public:
-    void modify(std::vector<Packet>& vec, const Connection& conn);
-    void add(std::unique_ptr<IModifier> modifier)
-    {
-        modifiers_.push_back(std::move(modifier));
-    }
+    void modify(std::vector<Packet> &vec, const Connection &conn);
+    void add(std::unique_ptr<IModifier> modifier) { modifiers_.push_back(std::move(modifier)); }
 };
 
 #endif// WAIWAIDPI_MODIFIER_HPP

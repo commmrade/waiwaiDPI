@@ -3,10 +3,10 @@
 //
 
 #include "common.hpp"
-#include "../../checksum.hpp"
-
+#include "checksum.hpp"
 #include <algorithm>
 #include <cassert>
+#include <stdexcept>
 
 bool timestamp_val_offset(Packet &packet, const int offset)
 {
@@ -25,28 +25,27 @@ bool timestamp_val_offset(Packet &packet, const int offset)
             return false;// not enough bytes to get KIND,LENGTH
         }
 
-        const std::uint8_t kind = tcp_bytes[0];
+        const auto kind = static_cast<std::uint8_t>(tcp_bytes[0]);
         if (kind == 1) {// no-op
             tcp_bytes = tcp_bytes.subspan(1);
             continue;
         }
 
-        const std::uint8_t size = tcp_bytes[1];
+        const auto size = static_cast<std::uint8_t>(tcp_bytes[1]);
         if (kind != TS_OPT_KIND) {
             if (tcp_bytes.size() < size) { return false; }
 
-            assert(size > 0);
             tcp_bytes = tcp_bytes.subspan(size);// size includes kind,length + payload
             continue;
         }
 
         if (size < TS_OPT_SIZE || size > TS_OPT_SIZE) { return false; }
 
-        auto *tv = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2));
-        auto *tr = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2 + sizeof(*tv)));
+        auto *tval = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2));
+        auto *tresp = std::start_lifetime_as<std::uint32_t>(std::next(tcp_bytes.data(), 2 + sizeof(*tval)));
 
-        *tv = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tv)) + offset));
-        *tr = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tr)) + offset));
+        *tval = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tval)) + offset));
+        *tresp = htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(*tresp)) + offset));
 
         break;
     }
@@ -92,7 +91,7 @@ std::vector<Packet>
 std::vector<char> concat(std::vector<Packet> packets, const bool skip_fake)
 {
     if (packets.front().network_hdr()->protocol == IPPROTO_TCP) {
-        std::stable_sort(packets.begin(), packets.end(), [](const Packet& lhs, const Packet& rhs) {
+        std::ranges::stable_sort(packets, [](const Packet &lhs, const Packet &rhs) {
             const auto *lhs_tcp = static_cast<const tcphdr *>(lhs.transport_hdr());
             const auto *rhs_tcp = static_cast<const tcphdr *>(rhs.transport_hdr());
 
@@ -109,7 +108,7 @@ std::vector<char> concat(std::vector<Packet> packets, const bool skip_fake)
     std::vector<char> full_payload;
     for (const auto &pkt : packets) {
         if (skip_fake && pkt.is_fake_blob) {
-            continue; // do not care about domains in fake blobs
+            continue;// do not care about domains in fake blobs
         }
 
         const auto payload = pkt.payload();

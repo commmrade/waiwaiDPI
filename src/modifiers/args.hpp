@@ -5,17 +5,11 @@
 #ifndef WAIWAIDPI_SPLIT_H
 #define WAIWAIDPI_SPLIT_H
 
-#include <cassert>
-#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <format>
-#include <netinet/tcp.h>
-#include "../packet_view.hpp"
+#include "packet_view.hpp"
 #include <string>
-#include "../checksum.hpp"
-
 
 struct Position
 {
@@ -25,7 +19,7 @@ struct Position
         Add,
         Subtract,
     };
-    std::string arg; // "hoststart", "hostend", "hostmid" - for Host in HTTP and SNI Hostname in TLS. "sniext" for TLS only.
+    std::string arg; // Markers::HOSTSTART_STR, Markers::HOSTEND_STR, Markers::HOSTMID_STR - for Host in HTTP and SNI Hostname in TLS. Markers::SNIEXT_STR for TLS only.
     Operation operation{};
     std::size_t offset{0};
 };

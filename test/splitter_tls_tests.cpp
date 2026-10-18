@@ -52,7 +52,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for TLS works", "[splitter
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = ["2", "hostmid"]
+    split_at = ["2", Markers::HOSTMID_STR]
     )toml";
     build_tls_splitter(config);
 

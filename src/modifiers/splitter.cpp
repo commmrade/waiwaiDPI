@@ -4,10 +4,9 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "splitter.hpp"
-
-#include "../checksum.hpp"
 #include "algorithms/common.hpp"
 #include "algorithms/split.hpp"
+#include "checksum.hpp"
 #include "markers.hpp"
 #include "spdlog/spdlog.h"
 #include <arpa/inet.h>
@@ -204,7 +203,7 @@ void Splitter::modify(std::vector<Packet> &vec, const Connection &conn)
     }
 }
 
-bool Splitter::matches(const std::vector<Packet> &packets, const Connection &conn) const
+bool Splitter::matches([[maybe_unused]] const std::vector<Packet> &packets, const Connection &conn) const
 {
     if (args_.l7_payload.has_value()) { return conn.payload_proto() == args_.l7_payload.value(); }
     return true;
@@ -277,7 +276,7 @@ void Splitter::parse_config(const toml::table *table)
     if (cksum_node != nullptr) {
         if (!cksum_node->is_boolean()) { throw std::runtime_error("badcksum must be a bool"); }
 
-        srand(time(nullptr));
+        srand(static_cast<unsigned int>(time(nullptr)));
         args_.badcksum = cksum_node->as_boolean()->get();
     }
 

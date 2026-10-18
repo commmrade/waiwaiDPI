@@ -4,11 +4,9 @@
 
 #ifndef WAIWAIDPI_SPLIT_HPP
 #define WAIWAIDPI_SPLIT_HPP
-#include "../../conn_tracker.hpp"
-#include "../../packet_view.hpp"
-#include "../args.hpp"
-
-
+#include "conn_tracker.hpp"
+#include "packet_view.hpp"
+#include "modifiers/args.hpp"
 #include <expected>
 #include <unordered_set>
 #include <vector>
@@ -16,7 +14,7 @@
 namespace split {
     struct SplitConfig
     {
-        const Position& pos;
+        std::reference_wrapper<const Position> pos;
         bool handle_fake;
     };
 

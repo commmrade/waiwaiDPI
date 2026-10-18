@@ -4,8 +4,8 @@
 
 #ifndef WAIWAIDPI_COMMON_HPP
 #define WAIWAIDPI_COMMON_HPP
+#include "packet_view.hpp"
 #include <span>
-#include "../../packet_view.hpp"
 
 bool timestamp_val_offset(Packet &packet, const int offset);
 std::vector<Packet>

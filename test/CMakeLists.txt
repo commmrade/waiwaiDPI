@@ -68,6 +68,9 @@ add_executable(tests
         disorder_general_tests.cpp
         disorder_common.hpp
 )
+
+target_include_directories(tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+
 target_link_libraries(
   tests
   PRIVATE waiwaiDPI::waiwaiDPI_warnings

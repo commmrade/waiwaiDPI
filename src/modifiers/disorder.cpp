@@ -2,15 +2,14 @@
 // Created by klewy on 10/12/26.
 //
 
-
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include "spdlog/spdlog.h"
 #include "disorder.hpp"
-#include "../checksum.hpp"
+#include "checksum.hpp"
 #include "algorithms/common.hpp"
 #include "algorithms/split.hpp"
 #include "args.hpp"
 #include "markers.hpp"
-#include "spdlog/spdlog.h"
 #include <arpa/inet.h>
 #include <iostream>
 #include <ranges>
@@ -21,19 +20,19 @@ static std::optional<std::size_t> calculate_seqovl_off(const Position &seqovl, c
     std::size_t ret = 0;
 
     const auto &marks = markers;
-    if (pos.arg == "hoststart") {
+    if (pos.arg == Markers::HOSTSTART_STR) {
         if (!marks.hoststart.has_value()) { return std::nullopt; }
 
         ret = helpers::do_operation(marks.hoststart.value(), pos.operation, pos.offset);
-    } else if (pos.arg == "hostend") {
+    } else if (pos.arg == Markers::HOSTEND_STR) {
         if (!marks.hostend.has_value()) { return std::nullopt; }
 
         ret = helpers::do_operation(marks.hostend.value(), pos.operation, pos.offset);
-    } else if (pos.arg == "hostmid") {
+    } else if (pos.arg == Markers::HOSTMID_STR) {
         if (!marks.hostmid.has_value()) { return std::nullopt; }
 
         ret = helpers::do_operation(marks.hostmid.value(), pos.operation, pos.offset);
-    } else if (pos.arg == "sniext") {
+    } else if (pos.arg == Markers::SNIEXT_STR) {
         if (!marks.hostend.has_value()) { return std::nullopt; }
 
         ret = helpers::do_operation(marks.sniext.value(), pos.operation, pos.offset);
@@ -90,10 +89,10 @@ void Disorder::seqovl(std::vector<Packet> &packets, bool handle_fake, const Conn
         std::next(new_payload.data(), static_cast<std::ptrdiff_t>(seqovl_num)), packet_pl.data(), packet_pl.size());
 
     auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-    auto *ip = packet.network_hdr();
+    auto *iph = packet.network_hdr();
 
     const auto mss =
-        static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcp));
+        static_cast<std::size_t>(conn.get_mss()) - (iph->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcphdr));
 
     auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_num);
     if (new_payload.size() > mss) {
@@ -220,18 +219,12 @@ void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, con
             SPDLOG_ERROR("Bad Checksum for protocols other than TCP hasn't been implemented yet");
         }
     }
-
-
 }
 
 void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
 {
-    if (!check_ip(vec)) {
-        return;
-    }
-    if (!check_host(vec, conn)) {
-        return;
-    }
+    if (!check_ip(vec)) { return; }
+    if (!check_host(vec, conn)) { return; }
 
     if (args_.fake_blob.has_value()) {
         const auto front_view = parse_packet_view(vec.front());
@@ -245,7 +238,6 @@ void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
         blob_packets.front().is_fake_blob = true;
 
         if (blob_packets.front().network_hdr()->protocol == IPPROTO_TCP) {
-            auto *tcp = static_cast<tcphdr *>(blob_packets.front().transport_hdr());
             calc_packet_checksum(blob_packets.front());
         }
 
@@ -265,7 +257,7 @@ void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
     std::reverse(reversible.begin(), reversible.end());// NOLINT
 }
 
-bool Disorder::matches(const std::vector<Packet> &packets, const Connection &conn) const
+bool Disorder::matches([[maybe_unused]] const std::vector<Packet> &packets, const Connection &conn) const
 {
     if (args_.l7_payload.has_value()) { return conn.payload_proto() == args_.l7_payload.value(); }
     return true;

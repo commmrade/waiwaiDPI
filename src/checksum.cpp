@@ -3,14 +3,13 @@
 //
 
 #include "checksum.hpp"
-
 #include <cstring>
-
+#include <stdexcept>
 
 void calc_packet_checksum(Packet &pkt)
 {
     if (pkt.network_hdr()->protocol == IPPROTO_TCP) {
-        auto* tcp = static_cast<tcphdr*>(pkt.transport_hdr());
+        auto *tcp = static_cast<tcphdr *>(pkt.transport_hdr());
         tcp->check = 0;
         tcp->check = calc_tcp_checksum(pkt);
     } else {
@@ -29,7 +28,7 @@ std::uint16_t calc_tcp_checksum(const Packet &pkt)
         std::uint16_t tcp_len;
     } __attribute__((packed));
 
-    const auto* tcp = static_cast<const tcphdr*>(pkt.transport_hdr());
+    const auto *tcp = static_cast<const tcphdr *>(pkt.transport_hdr());
     const auto payload = pkt.payload();
 
     pseudo_hdr phdr{};
@@ -49,7 +48,7 @@ std::uint16_t calc_tcp_checksum(const Packet &pkt)
             sum += ntohs(word);
         }
         if (i < len) {
-            std::uint16_t const word = static_cast<std::uint8_t>(data[i]) << 8;
+            auto const word = static_cast<std::uint16_t>(static_cast<std::uint8_t>(data[i]) << 8);
             sum += word;
         }
     };

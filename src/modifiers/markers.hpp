@@ -7,18 +7,24 @@
 #include <cstdint>
 #include <optional>
 #include <span>
-#include "../protocol.hpp"
+#include "protocol.hpp"
 #include <expected>
 
 struct Markers
 {
     // Both TLS and HTTP
     std::optional<std::size_t> hoststart;
+    static constexpr std::string_view HOSTSTART_STR = "hoststart";
+
     std::optional<std::size_t> hostmid;
+    static constexpr std::string_view HOSTMID_STR = "hostmid";
+
     std::optional<std::size_t> hostend;
+    static constexpr std::string_view HOSTEND_STR = "hostend";
 
     // TLS-specific
     std::optional<std::size_t> sniext;
+    static constexpr std::string_view SNIEXT_STR = "sniext";
 };
 
 std::expected<Markers, std::string> find_markers_tls(std::span<const char> payload);

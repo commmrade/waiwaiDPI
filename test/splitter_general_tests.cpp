@@ -476,7 +476,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Host check works on original data, not fa
     [[profile.1.modifiers]]
     name = "splitter"
     allowed_hosts = ["xiaaosi.xyz"]
-    split_at = ["hoststart"]
+    split_at = [Markers::HOSTSTART_STR]
     )toml";
     build_tls_splitter(config);
 

@@ -7,7 +7,6 @@
 
 #include "args.hpp"
 #include "modifier.hpp"
-
 #include <unordered_set>
 
 class Disorder : public IModifier

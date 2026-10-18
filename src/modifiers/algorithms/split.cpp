@@ -3,16 +3,14 @@
 //
 
 #include "split.hpp"
-
-#include "../../checksum.hpp"
-#include "../markers.hpp"
+#include "checksum.hpp"
+#include "modifiers/markers.hpp"
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <print>
 #include <ranges>
-
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include <algorithm>
 #include <spdlog/spdlog.h>
 
 namespace helpers {
@@ -37,26 +35,31 @@ std::size_t do_operation(const std::size_t start, const Position::Operation oper
 };
 
 
-static bool seq_lt(const Packet &a, const Packet &b)
+static bool seq_lt(const Packet &lhs, const Packet &rhs)
 {
-    const auto sa = ntohl(static_cast<const tcphdr *>(a.transport_hdr())->seq);
-    const auto sb = ntohl(static_cast<const tcphdr *>(b.transport_hdr())->seq);
-    return static_cast<int32_t>(sa - sb) < 0;
+    const auto sa_val = ntohl(static_cast<const tcphdr *>(lhs.transport_hdr())->seq);
+    const auto sb_val = ntohl(static_cast<const tcphdr *>(rhs.transport_hdr())->seq);
+    return static_cast<int32_t>(sa_val - sb_val) < 0;
 }
 
 static std::pair<std::vector<Packet>::iterator, std::size_t>
     find_packet_by_offset(std::vector<Packet> &packets, std::size_t split_pos, bool handle_fake)
 {
     std::vector<std::size_t> idx;
-    for (std::size_t i = 0; i < packets.size(); ++i)
-        if (packets[i].is_fake_blob == handle_fake) idx.push_back(i);
+    for (std::size_t i = 0; i < packets.size(); ++i) {
+        if (packets[i].is_fake_blob == handle_fake) {
+            idx.push_back(i);
+        }
+    }
 
-    std::ranges::stable_sort(idx, [&](std::size_t a, std::size_t b) { return seq_lt(packets[a], packets[b]); });
+    std::ranges::stable_sort(idx, [&](std::size_t lhs, std::size_t rhs) { return seq_lt(packets[lhs], packets[rhs]); });
 
     std::size_t acc = 0;
     for (auto i : idx) {
         const auto sz = packets[i].payload().size();
-        if (split_pos < acc + sz) return { packets.begin() + i, split_pos - acc };
+        if (split_pos < acc + sz) {
+            return { std::next(packets.begin(), static_cast<std::ptrdiff_t>(i)), split_pos - acc };
+        }
         acc += sz;
     }
     return { packets.end(), 0 };
@@ -93,9 +96,9 @@ static void split_and_insert_packets_tcp(std::vector<Packet>::iterator iter,
     if (pkt.action.action == PacketAction::Action::ACCEPT) { pkt.action.action = PacketAction::Action::DROP_AND_SEND; }
 
     tcp = static_cast<tcphdr *>(pkt.transport_hdr());
-    auto *ip = pkt.network_hdr();
+    auto *iph = pkt.network_hdr();
 
-    ip->tot_len = htons((ip->ihl * 4) + (tcp->doff * 4) + static_cast<std::uint16_t>(pkt.payload().size()));
+    iph->tot_len = htons((iph->ihl * 4) + (tcp->doff * 4) + static_cast<std::uint16_t>(pkt.payload().size()));
     calc_packet_checksum(pkt);
 
     packets.insert(iter + 1, std::move(second));
@@ -150,20 +153,20 @@ std::expected<bool, std::string>
 
     std::size_t split_pos = 0;
 
-    if (cfg.pos.arg == "hoststart") {
+    if (cfg.pos.get().arg == Markers::HOSTSTART_STR) {
         if (!marks.hoststart.has_value()) { return std::unexpected{ "Could not find 'hoststart'" }; }
 
-        split_pos = helpers::do_operation(marks.hoststart.value(), cfg.pos.operation, cfg.pos.offset);
-    } else if (cfg.pos.arg == "hostend") {
+        split_pos = helpers::do_operation(marks.hoststart.value(), cfg.pos.get().operation, cfg.pos.get().offset);
+    } else if (cfg.pos.get().arg == Markers::HOSTEND_STR) {
         if (!marks.hostend.has_value()) { return std::unexpected{ "Could not find 'hostend'" }; }
 
-        split_pos = helpers::do_operation(marks.hostend.value(), cfg.pos.operation, cfg.pos.offset);
-    } else if (cfg.pos.arg == "hostmid") {
+        split_pos = helpers::do_operation(marks.hostend.value(), cfg.pos.get().operation, cfg.pos.get().offset);
+    } else if (cfg.pos.get().arg == Markers::HOSTMID_STR) {
         if (!marks.hostmid.has_value()) { return std::unexpected{ "Could not find 'hostmid'" }; }
 
-        split_pos = helpers::do_operation(marks.hostmid.value(), cfg.pos.operation, cfg.pos.offset);
+        split_pos = helpers::do_operation(marks.hostmid.value(), cfg.pos.get().operation, cfg.pos.get().offset);
     } else {
-        const auto offset = cfg.pos.offset;
+        const auto offset = cfg.pos.get().offset;
         split_pos = offset;
     }
 
@@ -182,30 +185,28 @@ std::expected<bool, std::string>
     split::split_tls(std::vector<Packet> &packets, const std::vector<char> &full_payload, const SplitConfig &cfg)
 {
     const auto markers_res = find_markers(full_payload, L7Proto::TLS);
-    if (!markers_res.has_value()) {
-        return std::unexpected{ "Could not parse markers" };
-    }
+    if (!markers_res.has_value()) { return std::unexpected{ "Could not parse markers" }; }
     const auto &marks = markers_res.value();
 
     std::size_t split_pos = 0;
-    if (cfg.pos.arg == "hoststart") {
+    if (cfg.pos.get().arg == Markers::HOSTSTART_STR) {
         if (!marks.hoststart.has_value()) { return std::unexpected{ "Could not find 'hoststart'" }; }
 
-        split_pos = helpers::do_operation(marks.hoststart.value(), cfg.pos.operation, cfg.pos.offset);
-    } else if (cfg.pos.arg == "hostend") {
+        split_pos = helpers::do_operation(marks.hoststart.value(), cfg.pos.get().operation, cfg.pos.get().offset);
+    } else if (cfg.pos.get().arg == Markers::HOSTEND_STR) {
         if (!marks.hostend.has_value()) { return std::unexpected{ "Could not find 'hostend'" }; }
 
-        split_pos = helpers::do_operation(marks.hostend.value(), cfg.pos.operation, cfg.pos.offset);
-    } else if (cfg.pos.arg == "hostmid") {
+        split_pos = helpers::do_operation(marks.hostend.value(), cfg.pos.get().operation, cfg.pos.get().offset);
+    } else if (cfg.pos.get().arg == Markers::HOSTMID_STR) {
         if (!marks.hostmid.has_value()) { return std::unexpected{ "Could not find 'hostmid'" }; }
 
-        split_pos = helpers::do_operation(marks.hostmid.value(), cfg.pos.operation, cfg.pos.offset);
-    } else if (cfg.pos.arg == "sniext") {
+        split_pos = helpers::do_operation(marks.hostmid.value(), cfg.pos.get().operation, cfg.pos.get().offset);
+    } else if (cfg.pos.get().arg == Markers::SNIEXT_STR) {
         if (!marks.sniext.has_value()) { return std::unexpected{ "Could not find 'sniext'" }; }
 
-        split_pos = helpers::do_operation(marks.sniext.value(), cfg.pos.operation, cfg.pos.offset);
+        split_pos = helpers::do_operation(marks.sniext.value(), cfg.pos.get().operation, cfg.pos.get().offset);
     } else {
-        const auto offset = cfg.pos.offset;
+        const auto offset = cfg.pos.get().offset;
         split_pos = offset;
     }
 
@@ -221,9 +222,9 @@ std::expected<bool, std::string>
 }
 
 std::expected<bool, std::string>
-    split::split_other(std::vector<Packet> &packets, const std::vector<char> &full_payload, const SplitConfig &cfg)
+    split::split_other(std::vector<Packet> &packets, [[maybe_unused]] const std::vector<char> &full_payload, const SplitConfig &cfg)
 {
-    const auto split_pos = cfg.pos.offset;
+    const auto split_pos = cfg.pos.get().offset;
 
     auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos, cfg.handle_fake);
     if (iter == packets.end()) { return { false }; }

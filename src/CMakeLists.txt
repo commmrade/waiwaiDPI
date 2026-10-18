@@ -57,4 +57,4 @@ target_link_libraries(
 
 waiwaiDPI_configure_linker(main)
 
-target_include_directories(main PRIVATE "${CMAKE_BINARY_DIR}/configured_files/include")
+target_include_directories(main PRIVATE "${CMAKE_BINARY_DIR}/configured_files/include" "${CMAKE_SOURCE_DIR}/src")

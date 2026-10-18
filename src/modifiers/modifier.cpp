@@ -3,6 +3,7 @@
 //
 
 #include "modifier.hpp"
+
 void Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
 {
     for (auto &modifier : modifiers_) {

@@ -4,8 +4,6 @@
 
 #ifndef WAIWAIDPI_PACKET_HPP
 #define WAIWAIDPI_PACKET_HPP
-#include "protocol.hpp"
-
 
 #include <cstdint>
 #include <netinet/in.h>
@@ -14,10 +12,8 @@
 #include <netinet/udp.h>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <variant>
 #include <vector>
-
 
 struct PacketView
 {

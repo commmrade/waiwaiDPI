@@ -56,7 +56,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at Header for HTTP works", "[splitt
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = ["hostmid"]
+    split_at = [Markers::HOSTMID_STR]
     )toml";
     build_http_splitter(config);
 
@@ -91,7 +91,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at HEaDeR for HTTP works", "[splitt
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = ["hostmid"]
+    split_at = [Markers::HOSTMID_STR]
     )toml";
     build_http_splitter(config);
 
@@ -126,7 +126,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for HTTP works", "[splitte
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = ["2", "hostmid"]
+    split_at = ["2", Markers::HOSTMID_STR]
     )toml";
     build_http_splitter(config);
 

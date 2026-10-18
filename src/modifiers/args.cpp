@@ -3,6 +3,7 @@
 //
 
 #include "args.hpp"
+#include <cassert>
 
 Position parse_position(const std::string_view split)
 {
@@ -66,18 +67,18 @@ std::vector<char> parse_blob(const std::string_view &str)
             throw std::runtime_error(std::format("Blob at filepath '{}' does not exist", str));
         }
 
-        auto *fp = std::fopen(str.data(), "rb");
-        if (!fp) { throw std::runtime_error(std::format("Could not open file '{}'", str)); }
-        int ret = std::fseek(fp, 0U, SEEK_END);
+        auto* file = std::fopen(str.data(), "rb");
+        if (!file) { throw std::runtime_error(std::format("Could not open file '{}'", str)); }
+        int ret = std::fseek(file, 0U, SEEK_END);
         if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
-        const auto size = std::ftell(fp);
+        const auto size = std::ftell(file);
         if (size < 0) { throw std::runtime_error(std::strerror(errno)); }
-        ret = std::fseek(fp, 0U, SEEK_SET);
+        ret = std::fseek(file, 0U, SEEK_SET);
         if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
-        std::vector<char> buf(size, 0);
-        const auto rd = std::fread(buf.data(), 1U, static_cast<std::size_t>(size), fp);
+        std::vector<char> buf(static_cast<std::size_t>(size), 0);
+        const auto rd = std::fread(buf.data(), 1U, static_cast<std::size_t>(size), file);
         if (rd < 0) { throw std::runtime_error(std::strerror(errno)); }
-        ret = std::fclose(fp);
+        ret = std::fclose(file);
 
         return buf;
     }

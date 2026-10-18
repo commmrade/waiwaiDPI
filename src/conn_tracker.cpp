@@ -66,7 +66,10 @@ void Connection::reasm_insert(const PacketView &pkt)
         reasm_.segs.push_back(create_packet(pkt));
     } else {
         if (!reasm_is_duplicate(pkt)) {
-            if (auto seq_opt = pkt.get_seq(); !reasm_.segs.empty() && seq_opt.has_value() && parse_packet_view(reasm_.segs.back()).get_seq().value() + reasm_.segs.back().payload().size() == seq_opt.value()) [[likely]] {
+            if (auto seq_opt = pkt.get_seq();
+                !reasm_.segs.empty() && seq_opt.has_value()
+                && parse_packet_view(reasm_.segs.back()).get_seq().value() + reasm_.segs.back().payload().size()
+                       == seq_opt.value()) [[likely]] {
                 reasm_.segs.push_back(create_packet(pkt));
             } else {
                 reasm_.segs.push_back(create_packet(pkt));
@@ -92,9 +95,9 @@ void Connection::reasm_sort()
 }
 bool Connection::reasm_is_duplicate(const PacketView &pkt)
 {
-    auto iter = std::ranges::find_if(reasm_.segs.begin(), reasm_.segs.end(), [&pkt](const Packet& packet) {
+    auto iter = std::ranges::find_if(reasm_.segs.begin(), reasm_.segs.end(), [&pkt](const Packet &packet) {
         if (packet.network_hdr()->protocol == IPPROTO_TCP) {
-            const auto* tcp = static_cast<const tcphdr*>(packet.transport_hdr());
+            const auto *tcp = static_cast<const tcphdr *>(packet.transport_hdr());
             return ntohl(tcp->seq) == pkt.get_seq().value();
         } else {
             // TODO: for now it is false
@@ -146,13 +149,13 @@ static std::optional<int> parse_mss_opt(std::span<const char> tcpb)
             return false;// not enough bytes to get KIND,LENGTH
         }
 
-        const std::uint8_t kind = tcpb[0];
+        const auto kind = static_cast<std::uint8_t>(tcpb[0]);
         if (kind == 1) {// no-op
             tcpb = tcpb.subspan(1);
             continue;
         }
 
-        const std::uint8_t size = tcpb[1];
+        const auto size = static_cast<std::uint8_t>(tcpb[1]);
         if (kind != MSS_OPT_KIND) {
             if (tcpb.size() < size) { return false; }
 
@@ -245,17 +248,14 @@ int ConnTracker::timeout_for_tcp_state(const Connection::Tcp::TcpState state)
     }
 }
 
-std::unordered_map<std::tuple<unsigned, unsigned short, unsigned, unsigned short, int>, Connection>::iterator ConnTracker::get_conn(const std::uint32_t saddr,
-    const std::uint16_t source,
-    const std::uint32_t daddr,
-    const std::uint16_t dest,
-    const int proto)
+std::unordered_map<std::tuple<unsigned, unsigned short, unsigned, unsigned short, int>, Connection>::iterator
+    ConnTracker::get_conn(const std::uint32_t saddr,
+        const std::uint16_t source,
+        const std::uint32_t daddr,
+        const std::uint16_t dest,
+        const int proto)
 {
-    const std::tuple conn_tuple{ saddr,
-        source,
-        daddr,
-        dest,
-        proto };
+    const std::tuple conn_tuple{ saddr, source, daddr, dest, proto };
 
     auto conn_iter = conns_.find(conn_tuple);
     if (conn_iter == conns_.end()) {
