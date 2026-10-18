@@ -26,7 +26,7 @@ public:
         std::uint32_t cur_seq{};
 
         // helpers
-        std::uint32_t expected_seq;
+        std::uint32_t expected_seq{};
 
         int mss{536}; // According to RFC xxxx, TCP Default MSS is 536 bytes (for IPV4)
     };
@@ -44,19 +44,14 @@ private:
 
     L7Proto payload_proto_{ L7Proto::UNKNOWN };
 
-    // struct
-    // {
-    //     std::vector<Packet> frags;
-    //     std::size_t pos{ 0 };
-    //     std::size_t total_size{ 0 };
-    //     std::optional<std::uint32_t> expected_seq{ 0 };
-    // } reasm_;
     struct
     {
-        std::vector<Packet> frags;
+        std::vector<Packet> segs;
     } reasm_;
+    void reasm_sort();
+    bool reasm_is_duplicate(const PacketView& pkt);
 
-    std::uint32_t saddr_;
+    std::uint32_t saddr_{};
 
     std::uint8_t l4_proto_{};
     std::variant<std::monostate, Tcp, Udp> l4_state_;
@@ -68,6 +63,9 @@ private:
     void track_udp(const PacketView &packet);
 
 public:
+    void track(const PacketView &packet);
+    void track_transport(const PacketView &packet);
+
     void set_source_addr(const std::uint32_t saddr)
     {
         saddr_ = saddr;
@@ -91,14 +89,10 @@ public:
     void set_mss(const int mss);
 
 
-    void reset_reasm();
+    void reasm_reset();
+    void reasm_insert(const PacketView& pkt);
+    [[nodiscard]] const std::vector<Packet> &reasm_get() const { return reasm_.segs; }
 
-    void insert_reasm_frag(const PacketView& pkt);
-    void sort_reasm();
-
-    [[nodiscard]] const std::vector<Packet> &get_reasm_frags() const { return reasm_.frags; }
-
-    void track(const PacketView &packet);
 
     [[nodiscard]] std::size_t bytes_transfered() const { return pl_bytes_transfered_; }
     void set_bytes_transfered(const std::size_t bytes) { pl_bytes_transfered_ = bytes; }
@@ -117,8 +111,6 @@ public:
 
     [[nodiscard]] bool is_done() const { return is_done_; }
     void set_done(bool value) { is_done_ = value; }
-
-    void track_transport(const PacketView &packet);
 };
 
 namespace std {
@@ -143,6 +135,7 @@ class ConnTracker
 private:
     std::unordered_map<std::tuple<std::uint32_t, std::uint16_t, std::uint32_t, std::uint16_t, int>, Connection> conns_;
 
+    // TODO: make it per conn.
     static int timeout_for_tcp_state(const Connection::Tcp::TcpState state);
 
 public:
@@ -157,10 +150,6 @@ public:
     std::size_t count() const
     {
         return conns_.size();
-    }
-    auto& conns()
-    {
-        return conns_;
     }
 };
 

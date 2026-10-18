@@ -52,7 +52,7 @@ class Classifier
 private:
     std::vector<std::unique_ptr<PayloadClassifier>> classifiers_;
 public:
-    /* explicit */ Classifier(ConnTracker& tracker) {}
+    Classifier() = default;
 
     void add(std::unique_ptr<PayloadClassifier>&& classifier);
 

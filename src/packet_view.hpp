@@ -27,7 +27,7 @@ struct PacketView
     const iphdr *network_hdr{ nullptr };
     std::variant<const tcphdr *, const udphdr *> transport_hdr;
 
-    std::uint32_t packet_id;
+    std::uint32_t packet_id{};
 
     [[nodiscard]] std::uint16_t get_source_port() const;
     [[nodiscard]] std::uint16_t get_dest_port() const;
@@ -52,8 +52,8 @@ struct Packet
     std::vector<char> packet;
 
     std::ptrdiff_t network_offset{0};
-    std::ptrdiff_t transport_offset;
-    std::ptrdiff_t payload_offset;
+    std::ptrdiff_t transport_offset{};
+    std::ptrdiff_t payload_offset{};
 
     PacketAction action{ .packet_id = 0, .action = PacketAction::Action::SEND };
 

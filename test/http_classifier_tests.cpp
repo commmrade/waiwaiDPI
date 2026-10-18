@@ -66,7 +66,7 @@ TEST_CASE_METHOD(HttpTestFixture, "Full HTTP is classified correctly", "[http_cl
     auto& conn = conn_iter->second;
     conn.track(pkt);
 
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
     REQUIRE(conn.payload_proto() == L7Proto::HTTP);
@@ -83,11 +83,11 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP is classified correctly", "[http_c
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
-    res = classifier.classify(conn.get_reasm_frags());
+    res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }
 
@@ -102,11 +102,11 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at headers end", "[http_classifier
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
-    res = classifier.classify(conn.get_reasm_frags());
+    res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }
 
@@ -121,11 +121,11 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at Host Header", "[http_classifier
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
-    res = classifier.classify(conn.get_reasm_frags());
+    res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }
 
@@ -140,10 +140,10 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at Host Header Value", "[http_clas
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
-    res = classifier.classify(conn.get_reasm_frags());
+    res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }

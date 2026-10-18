@@ -58,24 +58,30 @@ void Connection::set_mss(const int mss)
         throw std::runtime_error{ "Not supported" };
     }
 }
-void Connection::reset_reasm() { reasm_.frags.clear(); }
+void Connection::reasm_reset() { reasm_.segs.clear(); }
 
-void Connection::insert_reasm_frag(const PacketView &pkt)
+void Connection::reasm_insert(const PacketView &pkt)
 {
-    reasm_.frags.push_back(create_packet(pkt));
-    sort_reasm();
-    // segments are in order at this point (IF TCP)
+    if (reasm_.segs.empty()) {
+        reasm_.segs.push_back(create_packet(pkt));
+    } else {
+        if (!reasm_is_duplicate(pkt)) {
+            if (auto seq_opt = pkt.get_seq(); !reasm_.segs.empty() && seq_opt.has_value() && parse_packet_view(reasm_.segs.back()).get_seq().value() + reasm_.segs.back().payload().size() == seq_opt.value()) [[likely]] {
+                reasm_.segs.push_back(create_packet(pkt));
+            } else {
+                reasm_.segs.push_back(create_packet(pkt));
+                reasm_sort();
+            }
+        }
+    }
 }
 
-void Connection::sort_reasm()
+void Connection::reasm_sort()
 {
     if (get_l4_proto() == IPPROTO_TCP) {
-        std::sort(reasm_.frags.begin(), reasm_.frags.end(), [](const Packet &lhs, const Packet &rhs) {
-            const auto *lhs_tcp = static_cast<const tcphdr *>(lhs.transport_hdr());
-            const auto *rhs_tcp = static_cast<const tcphdr *>(rhs.transport_hdr());
-
-            const uint32_t lhs_seq = ntohl(lhs_tcp->seq);
-            const uint32_t rhs_seq = ntohl(rhs_tcp->seq);
+        std::sort(reasm_.segs.begin(), reasm_.segs.end(), [](const Packet &lhs, const Packet &rhs) {
+            const auto lhs_seq = parse_packet_view(lhs).get_seq().value();
+            const auto rhs_seq = parse_packet_view(rhs).get_seq().value();
 
             // Modular comparison (RFC 1982 / RFC 793 SEQ_LT): correct across wraparound
             return static_cast<int32_t>(lhs_seq - rhs_seq) < 0;
@@ -83,6 +89,20 @@ void Connection::sort_reasm()
     } else {
         throw std::logic_error{ "sort Not supported for anything other than tcp" };
     }
+}
+bool Connection::reasm_is_duplicate(const PacketView &pkt)
+{
+    auto iter = std::ranges::find_if(reasm_.segs.begin(), reasm_.segs.end(), [&pkt](const Packet& packet) {
+        if (packet.network_hdr()->protocol == IPPROTO_TCP) {
+            const auto* tcp = static_cast<const tcphdr*>(packet.transport_hdr());
+            return ntohl(tcp->seq) == pkt.get_seq().value();
+        } else {
+            // TODO: for now it is false
+            return false;
+        }
+    });
+
+    return iter != reasm_.segs.end();
 }
 
 void Connection::track(const PacketView &packet)
@@ -269,7 +289,7 @@ void ConnTracker::clear_dead_connections(mnl_socket *sock, const std::uint32_t q
 
         auto timeout = calculate_timeout(iter->second);
         if (dur.count() >= timeout) {
-            for (const auto &pkt : iter->second.get_reasm_frags()) {
+            for (const auto &pkt : iter->second.reasm_get()) {
                 int ret = send_verdict(sock, queue_num, pkt.action.packet_id, NF_ACCEPT);
                 if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
             }

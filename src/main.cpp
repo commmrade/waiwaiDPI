@@ -77,31 +77,22 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     conn_iter->second.track(packet);
 
     if (!packet.payload.empty() && !conn_iter->second.is_done()) {
-        std::println("CONNECTION MSS IS: {}", conn_iter->second.get_mss());
         auto& conn = conn_iter->second;
 
         auto profile_iter = ctx->profiles->find({packet.get_dest_port(), packet.network_hdr->protocol});
         assert(profile_iter != (*ctx->profiles).end());
         auto& profile = profile_iter->second;
 
-        conn.insert_reasm_frag(packet);
-        const auto& packets_to_classify = conn.get_reasm_frags();
+        conn.reasm_insert(packet);
+        auto packets = conn.reasm_get();
 
-        assert(!packets_to_classify.empty());
-        auto res = profile.classifier.classify(packets_to_classify);
+        assert(!packets.empty());
+        auto res = profile.classifier.classify(packets);
         if (res.first == ClassifyResult::DONE) {
             conn.set_payload_proto(res.second.value());
+            conn.reasm_reset();
 
-            std::vector<Packet> packets;
-            const std::vector<Packet> frags = conn.get_reasm_frags();
-            conn.reset_reasm();
 
-            packets.reserve(frags.size());
-            for (const auto &frag : frags) {
-                packets.emplace_back(frag);
-            }
-
-            assert(!packets.empty());
             profile.modifier.modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
@@ -155,7 +146,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
             // Nothing for now
         } else {
             conn.set_done(true); // if error that means it probably won't be correctly classified, so just drop
-            for (const auto &pkt : conn.get_reasm_frags()) {
+            for (const auto &pkt : conn.reasm_get()) {
                 int ret = send_verdict(ctx->sock, ctx->queue_number, pkt.action.packet_id, NF_ACCEPT);
                 if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
             }

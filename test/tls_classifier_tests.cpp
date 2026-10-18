@@ -30,7 +30,7 @@ TEST_CASE_METHOD(TlsTestFixture, "Full TLS is classified correctly", "[tls_class
     auto& conn = conn_iter->second;
     conn.track(pkt);
 
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
     REQUIRE(conn.payload_proto() == L7Proto::TLS);
@@ -74,11 +74,11 @@ TEST_CASE_METHOD(TlsTestFixture, "Split TLS is classified correctly", "[tls_clas
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
-    res = classifier.classify(conn.get_reasm_frags());
+    res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
     REQUIRE(conn.payload_proto() == L7Proto::TLS);
@@ -103,15 +103,15 @@ TEST_CASE_METHOD(TlsTestFixture, "In-Order TLS segments", "[tls_classifier]")
     auto& conn = conn_iter->second;
 
     conn.track(pkt_1);
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(pkt_2);
-    res = classifier.classify(conn.get_reasm_frags());
+    res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(pkt_3);
-    res = classifier.classify(conn.get_reasm_frags());
+    res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }
 
@@ -125,6 +125,6 @@ TEST_CASE_METHOD(TlsTestFixture, "Out-of-Order TLS segments", "[tls_classifier]"
     auto& conn = conn_iter->second;
 
     conn.track(pkt_3);
-    auto res = classifier.classify(conn.get_reasm_frags());
+    auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::ERROR);  // <- adjust
 }

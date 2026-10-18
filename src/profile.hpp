@@ -93,7 +93,7 @@ inline std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> bui
         } else {
             throw std::runtime_error(std::format("Unknown protocol specified for profile '{}'", profile.first.str()));
         }
-        auto [iter, inserted] = ret.insert({{port, protocol}, Profile{.classifier = {tracker}}});
+        auto [iter, inserted] = ret.insert({{port, protocol}, Profile{}});
         if (!inserted) { // duplicate
             throw std::runtime_error("Duplicate port,protocol pair");
         }
