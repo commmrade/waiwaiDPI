@@ -117,3 +117,17 @@ std::vector<char> concat(std::vector<Packet> packets, const bool skip_fake)
 
     return full_payload;
 }
+std::vector<char> concat_sorted(std::vector<Packet> packets, const bool skip_fake)
+{
+    std::vector<char> full_payload;
+    for (const auto &pkt : packets) {
+        if (skip_fake && pkt.is_fake_blob) {
+            continue;// do not care about domains in fake blobs
+        }
+
+        const auto payload = pkt.payload();
+        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
+    }
+
+    return full_payload;
+}

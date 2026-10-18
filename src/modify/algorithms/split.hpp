@@ -28,14 +28,6 @@ namespace split {
 namespace helpers {
 std::size_t do_operation(const std::size_t start, const Position::Operation oper, const std::size_t offset);
 
-template<typename T>
-static bool safe_subspan(std::span<const T> &span, const std::size_t offset)
-{
-    if (span.size() < offset) { return false; }
-    span = span.subspan(offset);
-    return true;
-}
-
 }
 
 #endif// WAIWAIDPI_SPLIT_HPP

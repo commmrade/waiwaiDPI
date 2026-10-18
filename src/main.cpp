@@ -98,7 +98,6 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
             conn.set_payload_proto(res.second.value());
             conn.reasm_reset();
 
-
             profile.modifier.modify(packets, conn);
 
             for (const auto &send_pkt : packets) {
@@ -147,13 +146,14 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         } else {
             conn.set_done(true);// if error that means it probably won't be correctly classified, so just drop
             for (const auto &pkt : conn.reasm_get()) {
+                SPDLOG_DEBUG("Packet {} is dropped on Error", pkt.action.packet_id);
                 int ret = send_verdict(ctx->sock, ctx->queue_number, pkt.action.packet_id, NF_ACCEPT);
                 if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
             }
         }
     } else {
-        SPDLOG_DEBUG("Packet {} is for a connection that is done", packet.packet_id);
-        ret = send_verdict(ctx->sock, ctx->queue_number, ntohl(pkt_hdr->packet_id), NF_ACCEPT);
+        SPDLOG_DEBUG("Packet {} is dropped immediately (no payload or connection is done)", packet.packet_id);
+        ret = send_verdict(ctx->sock, ctx->queue_number, packet.packet_id, NF_ACCEPT);
         assert(ret);
     }
 

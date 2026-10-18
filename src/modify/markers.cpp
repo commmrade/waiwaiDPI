@@ -5,6 +5,7 @@
 #include "markers.hpp"
 #include "algorithms/split.hpp"
 #include <cassert>
+#include "util/safespan.hpp"
 
 std::expected<Markers, std::string> find_markers_http(std::span<const char> payload)
 {
@@ -46,12 +47,12 @@ std::expected<Markers, std::string> find_markers_tls(std::span<const char> paylo
         return std::unexpected{ "payload is not client hello" };
     }
 
-    if (!helpers::safe_subspan(payload, 38)) {// skip type(1) + length(3) + legacyversion(2) + random(32) fields
+    if (!safe_subspan(payload, 38)) {// skip type(1) + length(3) + legacyversion(2) + random(32) fields
         return std::unexpected{ "malformed tls" };
     }
 
     const auto legacy_session_id_len = static_cast<std::uint8_t>(payload[0]);
-    if (!helpers::safe_subspan(payload, sizeof(legacy_session_id_len) + legacy_session_id_len)) {
+    if (!safe_subspan(payload, sizeof(legacy_session_id_len) + legacy_session_id_len)) {
         return std::unexpected{ "malformed tls" };
     }
 
@@ -60,7 +61,7 @@ std::expected<Markers, std::string> find_markers_tls(std::span<const char> paylo
     std::memcpy(&cipher_suites_len, payload.data(), sizeof(cipher_suites_len));
     cipher_suites_len = ntohs(cipher_suites_len);
 
-    if (!helpers::safe_subspan(payload, sizeof(cipher_suites_len) + cipher_suites_len + 2)) {
+    if (!safe_subspan(payload, sizeof(cipher_suites_len) + cipher_suites_len + 2)) {
         return std::unexpected{ "malformed tls" };
     }
 
@@ -89,7 +90,7 @@ std::expected<Markers, std::string> find_markers_tls(std::span<const char> paylo
         constexpr auto ext_sni_type = 0x00;
         if (ext_type != ext_sni_type) {
 
-            if (!helpers::safe_subspan(payload, sizeof(ext_len) + ext_len)) {
+            if (!safe_subspan(payload, sizeof(ext_len) + ext_len)) {
                 return std::unexpected{ "malformed tls" };
             }
             continue;

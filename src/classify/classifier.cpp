@@ -22,7 +22,7 @@ void Classifier::add(std::unique_ptr<PayloadClassifier> &&classifier)
 
 std::pair<ClassifyResult, std::optional<L7Proto>> Classifier::classify(const std::vector<Packet> &packets)
 {
-    const auto full_payload = concat(packets);
+    const auto full_payload = concat_sorted(packets);
 
     int reasm_counter = 0;
     for (const auto &classifier : classifiers_) {
