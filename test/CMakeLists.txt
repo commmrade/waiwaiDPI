@@ -45,29 +45,32 @@ add_executable(tests
         http_classifier_tests.cpp
         tls_classifier_tests.cpp
         common.hpp
-        ../src/classifier.cpp
-        ../src/conn_tracker.cpp
-        ../src/packet_view.cpp
-        ../src/classifiers/http_classifier.cpp
-        ../src/classifiers/tls_classifier.cpp
-        ../src/checksum.cpp
-        ../src/modifiers/modifier.cpp
-        ../src/modifiers/splitter.cpp
-        ../src/modifiers/disorder.cpp
-        ../src/modifiers/algorithms/split.cpp
-        ../src/nfq.cpp
-        ../src/modifiers/args.cpp
+        ../src/classify/classifier.cpp
+        ../src/conntrack/conn_tracker.cpp
+        ../src/net/packet_view.cpp
+        ../src/classify/http_classifier.cpp
+        ../src/classify/tls_classifier.cpp
+        ../src/net/checksum.cpp
+        ../src/modify/modifier.cpp
+        ../src/modify/splitter.cpp
+        ../src/modify/disorder.cpp
+        ../src/modify/algorithms/split.cpp
+        ../src/sys/nfq.cpp
+        ../src/modify/args.cpp
         tcp_state_tests.cpp
-        ../src/modifiers/algorithms/common.cpp
-        ../src/modifiers/markers.cpp
+        ../src/modify/algorithms/common.cpp
+        ../src/modify/markers.cpp
         splitter_general_tests.cpp
-        ../src/iface.cpp
+        ../src/sys/iface.cpp
         splitter_tls_tests.cpp
         splitter_common.hpp
         splitter_http_tests.cpp
         disorder_general_tests.cpp
         disorder_common.hpp
 )
+
+target_include_directories(tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+
 target_link_libraries(
   tests
   PRIVATE waiwaiDPI::waiwaiDPI_warnings

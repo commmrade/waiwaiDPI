@@ -22,19 +22,15 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split for TLS works", "[splitter_m
     )toml";
     build_tls_splitter(config);
 
-    std::vector<Packet> packets;
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.reasm_get());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.reasm_get();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
     REQUIRE(packets.front().payload().size() == 2);
@@ -56,22 +52,19 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for TLS works", "[splitter
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = ["2", "hostmid"]
+    split_at = ["2", Markers::HOSTMID_STR]
     )toml";
     build_tls_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.reasm_get());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.reasm_get();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 3);
     REQUIRE(packets.front().payload().size() == 2);
@@ -98,19 +91,15 @@ TEST_CASE_METHOD(SplitterTestFixture, "Allowed hosts works for TLS specified hos
     )toml";
     build_tls_splitter(config);
 
-
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.reasm_get());
+    REQUIRE(res.first == ClassifyResult::DONE);
+    conn.set_payload_proto(res.second.value());
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.reasm_get();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 2);
     REQUIRE(packets.front().payload().size() == 2);
@@ -138,17 +127,13 @@ TEST_CASE_METHOD(SplitterTestFixture, "Allowed hosts does not work for TLS speci
     build_tls_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
-    tracker.track(packet_1_view);
-    auto &conn = tracker.get_conn(packet_1_view.network_hdr->saddr,
-        packet_1_view.get_source_port(),
-        packet_1_view.network_hdr->daddr,
-        packet_1_view.get_dest_port(),
-        packet_1_view.network_hdr->protocol);
-    auto res = classifier.classify(conn);
-    REQUIRE(res == ParseResult::SUCCESS);
+    auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
+    auto& conn = conn_iter->second;
+    conn.track(packet_1_view);
+    auto res = classifier.classify(conn.reasm_get());
+    REQUIRE(res.first == ClassifyResult::DONE);
 
-    packets.push_back(create_packet(packet_1_view));
-
+    std::vector<Packet> packets = conn.reasm_get();
     modifier.modify(packets, conn);
     REQUIRE(packets.size() == 1);
 }

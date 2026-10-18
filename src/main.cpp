@@ -1,16 +1,13 @@
-#include "classifier.hpp"
-#include "conn_tracker.hpp"
-
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include "classify/classifier.hpp"
+#include "conntrack/conn_tracker.hpp"
 #include "argh.h"
-#include "consts.hpp"
-#include "iptables.hpp"
-#include "nfq.hpp"
-#include "profile.hpp"
-#include <csignal>
-#include <spdlog/spdlog.h>
+#include "config/profile.hpp"
+#include "sys/iptables.hpp"
+#include "net/consts.hpp"
+#include "sys/nfq.hpp"
 #include <arpa/inet.h>
 #include <cassert>
+#include <csignal>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
@@ -24,13 +21,13 @@
 #include <netinet/ip.h>
 #include <print>
 #include <toml++/toml.hpp>
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#include <spdlog/spdlog.h>
 
 struct Context
 {
     mnl_socket *sock{ nullptr };
-    // Classifier *classifier{ nullptr };
-    // Modifier *modifier {nullptr};
-    std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>* profiles;
+    std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> *profiles;
     ConnTracker *tracker{ nullptr };
 
     int raw_sock;
@@ -52,8 +49,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     }
 
     assert(attrs[NFQA_PACKET_HDR]);
-    const auto *pkt_hdr =
-        static_cast<const nfqnl_msg_packet_hdr *>(mnl_attr_get_payload(attrs[NFQA_PACKET_HDR]));
+    const auto *pkt_hdr = static_cast<const nfqnl_msg_packet_hdr *>(mnl_attr_get_payload(attrs[NFQA_PACKET_HDR]));
     if (!pkt_hdr) {
         std::println(std::cerr, "No packet header");
         return MNL_CB_ERROR;
@@ -71,27 +67,37 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
     std::array<char, INET_ADDRSTRLEN> ip_dst{};
     inet_ntop(AF_INET, &packet.network_hdr->saddr, ip_src.data(), ip_src.size());
     inet_ntop(AF_INET, &packet.network_hdr->daddr, ip_dst.data(), ip_dst.size());
+    SPDLOG_INFO("Got a packet with id {} of size {}. {}:{} -> {}:{}",
+        packet.packet_id,
+        packet_len,
+        ip_src.data(),
+        packet.get_source_port(),
+        ip_dst.data(),
+        packet.get_dest_port());
 
-    SPDLOG_INFO("Got a packet with id {} of size {}. {}:{} -> {}:{}", packet.packet_id, packet_len, ip_src.data(), packet.get_source_port(), ip_dst.data(), packet.get_dest_port());
+    auto conn_iter = ctx->tracker->get_conn(packet.network_hdr->saddr,
+        packet.get_source_port(),
+        packet.network_hdr->daddr,
+        packet.get_dest_port(),
+        packet.network_hdr->protocol);
+    conn_iter->second.track(packet);
 
-    auto conn_iter = ctx->tracker->track(packet);
-    auto &conn = conn_iter->second;
+    if (!packet.payload.empty() && !conn_iter->second.is_done()) {
+        auto &conn = conn_iter->second;
 
-    auto profile_iter = ctx->profiles->find({packet.get_dest_port(), packet.network_hdr->protocol});
-    assert(profile_iter != (*ctx->profiles).end());
-    auto& profile = profile_iter->second;
+        auto profile_iter = ctx->profiles->find({ packet.get_dest_port(), packet.network_hdr->protocol });
+        assert(profile_iter != (*ctx->profiles).end());
+        auto &profile = profile_iter->second;
 
-    if (!packet.payload.empty() && !conn.is_done()) {
-        auto res = profile.classifier.classify(conn);
-        if (res == ParseResult::SUCCESS) {
-            std::vector<Packet> packets;
-            const std::vector<Packet> frags = conn.get_reasm_frags();
-            conn.reset_reasm();
+        conn.reasm_insert(packet);
+        auto packets = conn.reasm_get();
 
-            packets.reserve(frags.size());
-            for (const auto &frag : frags) {
-                packets.emplace_back(frag);
-            }
+        assert(!packets.empty());
+        auto res = profile.classifier.classify(packets);
+        if (res.first == ClassifyResult::DONE) {
+            conn.set_payload_proto(res.second.value());
+            conn.reasm_reset();
+
 
             profile.modifier.modify(packets, conn);
 
@@ -101,24 +107,18 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                     assert(send_pkt.action.packet_id);
                     SPDLOG_DEBUG("Packet with id {} is ACCEPTed", send_pkt.action.packet_id);
                     ret = send_verdict(ctx->sock, ctx->queue_number, send_pkt.action.packet_id, NF_ACCEPT);
-                    if (ret < 0) {
-                        perror("send accept failed, but dont stop");
-                    }
+                    if (ret < 0) { perror("send accept failed, but dont stop"); }
                     break;
                 }
                 case PacketAction::Action::DROP: {
                     SPDLOG_DEBUG("Packet with id {} is DROPped", send_pkt.action.packet_id);
                     ret = send_verdict(ctx->sock, ctx->queue_number, send_pkt.action.packet_id, NF_DROP);
-                    if (ret < 0) {
-                        perror("send drop failed, dont stop");
-                    }
+                    if (ret < 0) { perror("send drop failed, dont stop"); }
                     break;
                 }
                 case PacketAction::Action::DROP_AND_SEND: {
                     ret = send_verdict(ctx->sock, ctx->queue_number, send_pkt.action.packet_id, NF_DROP);
-                    if (ret < 0) {
-                        perror("send drop failed, dont stop");
-                    }
+                    if (ret < 0) { perror("send drop failed, dont stop"); }
                     [[fallthrough]];
                 }
                 case PacketAction::Action::SEND: {
@@ -141,13 +141,14 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 }
                 }
             }
+            conn.set_done(true);
+        } else if (res.first == ClassifyResult::REASSEMBLING) {
+            // Nothing for now
         } else {
-            if (conn.get_reasm_frags().size() >= Connection::MAX_REASM_SEGMENTS()) {
-                conn.set_done(true);
-                for (const auto &pkt : conn.get_reasm_frags()) {
-                    int ret = send_verdict(ctx->sock, ctx->queue_number, pkt.action.packet_id, NF_ACCEPT);
-                    if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
-                }
+            conn.set_done(true);// if error that means it probably won't be correctly classified, so just drop
+            for (const auto &pkt : conn.reasm_get()) {
+                int ret = send_verdict(ctx->sock, ctx->queue_number, pkt.action.packet_id, NF_ACCEPT);
+                if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
             }
         }
     } else {
@@ -161,10 +162,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
 std::atomic<bool> running = true;
 static_assert(std::atomic<bool>::is_always_lock_free && "Atomic cannot be used in signal handler on this platform");
-void sig_handler(int sig)
-{
-    running.store(false);
-}
+void sig_handler(int sig) { running.store(false); }
 
 int main(int argc, char *argv[])
 {
@@ -172,9 +170,7 @@ int main(int argc, char *argv[])
     sig.sa_handler = sig_handler;
 
     int ret = ::sigaction(SIGINT, &sig, nullptr);
-    if (ret < 0) {
-        throw std::runtime_error("Could not setup signal handler");
-    }
+    if (ret < 0) { throw std::runtime_error("Could not setup signal handler"); }
 
 #if SPDLOG_ACTIVE_LEVEL <= SPDLOG_LEVEL_DEBUG
     spdlog::set_level(spdlog::level::debug);
@@ -300,7 +296,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    for (const auto& profile : profiles) {
+    for (const auto &profile : profiles) {
         std::string protocol_str;
         if (profile.first.second == IPPROTO_TCP) {
             protocol_str = "tcp";
@@ -309,15 +305,19 @@ int main(int argc, char *argv[])
         } else {
             throw std::runtime_error("Unknown protocol");
         }
-        rule_remove(std::format(
-            "iptables -D OUTPUT -p {} -m {} --dport {} "
-            "-m connbytes --connbytes 0:{} --connbytes-dir original --connbytes-mode packets "
-            "-j NFQUEUE --queue-num {}",
-            protocol_str, protocol_str, profile.first.first, Connection::MAX_REASM_SEGMENTS(), queue_number).c_str());
+        rule_remove(
+            std::format("iptables -D OUTPUT -p {} -m {} --dport {} "
+                        "-m connbytes --connbytes 0:{} --connbytes-dir original --connbytes-mode packets "
+                        "-j NFQUEUE --queue-num {}",
+                protocol_str,
+                protocol_str,
+                profile.first.first,
+                Connection::MAX_REASM_SEGMENTS(),
+                queue_number)
+                .c_str());
     }
     rule_remove(std::format("iptables -D OUTPUT -m mark --mark {} -j ACCEPT", mark));
 
     mnl_socket_close(socket);
     return EXIT_SUCCESS;
 }
-

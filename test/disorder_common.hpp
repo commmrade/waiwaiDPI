@@ -5,9 +5,10 @@
 #ifndef WAIWAIDPI_DISORDER_COMMON_HPP
 #define WAIWAIDPI_DISORDER_COMMON_HPP
 #include "../src/classifier.hpp"
-#include "../src/conn_tracker.hpp"
-#include "../src/modifiers/disorder.hpp"
-#include "../src/modifiers/modifier.hpp"
+#include "../src/classifiers/tls_classifier.hpp"
+#include "../src/conntrack/conn_tracker.hpp"
+#include "../src/modify/disorder.hpp"
+#include "../src/modify/modifier.hpp"
 #include <catch2/catch_all.hpp>
 #include <toml++/impl/parser.hpp>
 

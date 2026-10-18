@@ -5,12 +5,12 @@
 #ifndef WAIWAIDPI_COMMON_HPP
 #define WAIWAIDPI_COMMON_HPP
 
+#include "../src/classifier.hpp"
+#include "../src/conntrack/conn_tracker.hpp"
 #include <arpa/inet.h>
 #include <catch2/catch_all.hpp>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
-#include "../src/classifier.hpp"
-#include "../src/conn_tracker.hpp"
 
 
 struct Context
