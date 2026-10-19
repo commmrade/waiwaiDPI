@@ -144,6 +144,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
         } else if (res.first == ClassifyResult::REASSEMBLING) {
             // Nothing for now
         } else {
+            conn.reasm_reset();
             conn.set_done(true);// if error that means it probably won't be correctly classified, so just drop
             for (const auto &pkt : conn.reasm_get()) {
                 SPDLOG_DEBUG("Packet {} is dropped on Error", pkt.action.packet_id);
