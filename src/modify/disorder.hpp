@@ -27,12 +27,12 @@ class Disorder : public IModifier
         std::optional<std::vector<char>> seqovl_pat;
     } args_;
 
-    void seqovl(std::vector<Packet>& packets, bool handle_fake, const Connection& conn);
-    bool check_ip(const std::vector<Packet> &packets) const;
-    bool check_host(const std::vector<Packet>& packets, const Connection& conn) const;
-    void process(std::vector<Packet>& packets, const bool handle_fake, const Connection& conn);
+    void seqovl(std::vector<Packet>& packets, ModifyContext& ctx);
+
+    void process_fake(std::vector<Packet> &packets, ModifyContext& ctx);
+    void process_orig(std::vector<Packet>& packets, ModifyContext& ctx);
 public:
-    void modify(std::vector<Packet> &vec, const Connection &conn) override;
+    void modify(std::vector<Packet> &packets, ModifyContext& ctx) override;
     bool matches(const std::vector<Packet> &packets, const Connection &conn) const override;
     void parse_config(const toml::table *table) override;
 

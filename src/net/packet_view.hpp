@@ -42,7 +42,6 @@ struct PacketAction
     } action;
 };
 
-/// A struct for Owned packets. Heavily used with modifiers
 struct Packet
 {
     std::vector<char> packet;

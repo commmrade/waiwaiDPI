@@ -289,11 +289,11 @@ void ConnTracker::clear_dead_connections(mnl_socket *sock, const std::uint32_t q
 
         auto timeout = calculate_timeout(iter->second);
         if (dur.count() >= timeout) {
-            // for (const auto &pkt : iter->second.reasm_get()) {
-            //     SPDLOG_DEBUG("DELETING PACKET WITH ID: {}", pkt.action.packet_id);
-            //     int ret = send_verdict(sock, queue_num, pkt.action.packet_id, NF_ACCEPT);
-            //     if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
-            // }
+            for (const auto &pkt : iter->second.reasm_get()) {
+                SPDLOG_DEBUG("DELETING PACKET WITH ID: {}", pkt.action.packet_id);
+                int ret = send_verdict(sock, queue_num, pkt.action.packet_id, NF_ACCEPT);
+                if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
+            }
             iter = conns_.erase(iter);
         } else {
             ++iter;

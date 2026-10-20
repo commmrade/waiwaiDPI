@@ -15,8 +15,6 @@ class Splitter : public IModifier
     {
         std::vector<Position> splits;
         std::optional<std::vector<char>> fake_blob;
-        std::optional<std::unordered_set<std::string>> allowed_hosts;// if std::nullopt, then let everything through
-        std::optional<std::unordered_set<std::uint32_t>> allowed_ips;// if nullopt, then let everything through
         bool badcksum{ false };
         std::optional<int> seq_offset;
         std::optional<int> ts_offset;
@@ -26,14 +24,15 @@ class Splitter : public IModifier
         std::optional<std::vector<char>> seqovl_pat;
     } args_;
 
-    bool check_ip(const std::vector<Packet> &packets) const;
-    bool check_host(const std::vector<Packet> &packets, const Connection &conn) const;
-    void process(std::vector<Packet> &packets, const bool handle_fake, const Connection &conn);
+    // bool check_ip(const std::vector<Packet> &packets) const;
+    // bool check_host(const ModifyContext& ctx) const;
 
-    void seqovl(std::vector<Packet> &packets, bool handle_fake, const Connection &conn);
+    void process_fake(std::vector<Packet> &packets, ModifyContext& ctx);
+    void process_orig(std::vector<Packet>& packets, ModifyContext& ctx);
 
+    void seqovl(std::vector<Packet> &packets, const Connection &conn);
 public:
-    void modify(std::vector<Packet> &vec, const Connection &conn) override;
+    void modify(std::vector<Packet> &packets, ModifyContext& ctx) override;
     [[nodiscard]] bool matches(const std::vector<Packet> &packets, const Connection &conn) const override;
     void parse_config(const toml::table *table) override;
 

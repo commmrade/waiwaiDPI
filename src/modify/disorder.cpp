@@ -43,30 +43,25 @@ static std::optional<std::size_t> calculate_seqovl_off(const Position &seqovl, c
     return ret;
 }
 
-void Disorder::seqovl(std::vector<Packet> &packets, bool handle_fake, const Connection &conn)
+void Disorder::seqovl(std::vector<Packet> &packets, ModifyContext& ctx)
 {
-    const auto full_payload = concat(packets, !handle_fake);
-
-    auto markers = find_markers(full_payload, conn.payload_proto());
-    if (!markers.has_value()) {
-        SPDLOG_WARN("Was unable to find markers for seqovl");
-        return;
-    }
-
-    const auto seqovl_opt = calculate_seqovl_off(args_.seqovl.value(), markers.value());
+    const auto seqovl_opt = calculate_seqovl_off(args_.seqovl.value(), ctx.markers);
     if (!seqovl_opt.has_value()) {
         SPDLOG_WARN("Could not figured out seqovl offset");
         return;
     }
     const auto seqovl_num = seqovl_opt.value();
 
-    auto iter = packets.begin() + 1;
+    auto iter = std::ranges::find_if(packets, [](const Packet &packet) {
+        return !packet.is_fake_blob;
+    });
+    if (iter == packets.end()) { return; }
+    ++iter; // second orig segment
+
     if (static_cast<std::size_t>(seqovl_num) >= packets.front().payload().size()) {
         SPDLOG_WARN("Seqovl is too big");
         return;
     }
-
-    if (iter == packets.end()) { return; }
 
     auto &packet = *iter;
     const auto packet_view = parse_packet_view(packet);
@@ -92,7 +87,7 @@ void Disorder::seqovl(std::vector<Packet> &packets, bool handle_fake, const Conn
     auto *iph = packet.network_hdr();
 
     const auto mss =
-        static_cast<std::size_t>(conn.get_mss()) - (iph->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcphdr));
+        static_cast<std::size_t>(ctx.conn.get().get_mss()) - (iph->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcphdr));
 
     auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(seqovl_num);
     if (new_payload.size() > mss) {
@@ -117,50 +112,45 @@ void Disorder::seqovl(std::vector<Packet> &packets, bool handle_fake, const Conn
         std::swap(packet, new_packet);
     }
 }
-
-bool Disorder::check_ip(const std::vector<Packet> &packets) const
+void Disorder::process_fake(std::vector<Packet> &packets, ModifyContext &ctx)
 {
-    assert(!packets.empty());
-    if (args_.allowed_ips.has_value()) {
-        const auto addr = packets.front().network_hdr()->daddr;
-        if (!args_.allowed_ips.value().contains(addr)) { return false; }
+    auto filtered_packets = std::ranges::views::filter(packets, [](const Packet &packet) {
+        return packet.is_fake_blob;
+    });
+
+    if (args_.seq_offset.has_value()) {
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            sequence_offset(filtered_packets, args_.seq_offset.value());
+        } else {
+            SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
+        }
     }
 
-    return true;
+    if (args_.ts_offset.has_value()) {
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            timestamp_offset(filtered_packets, args_.ts_offset.value());
+        } else {
+            SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
+        }
+    }
+
+    if (args_.ipv4_ttl.has_value()) {
+        ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
+    }
+
+    if (args_.badcksum) {
+        badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+    }
 }
-
-bool Disorder::check_host(const std::vector<Packet> &packets, const Connection &conn) const
+void Disorder::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
 {
-    if (!args_.allowed_hosts.has_value()) { return true; }
-
-    const auto full_payload = concat(packets, true);
-
-    const auto markers_res = find_markers(full_payload, conn.payload_proto());
-    if (!markers_res.has_value()) {
-        return false;// that means this is some kind malformed request and idc
-    }
-
-    const auto &marks = markers_res.value();
-    if (!marks.hoststart.has_value() || !marks.hostend.has_value()) {
-        return false;// malformed request, how does this even happen
-    }
-
-    const std::string_view host{ std::next(full_payload.data(), static_cast<std::ptrdiff_t>(marks.hoststart.value())),
-        marks.hostend.value() - marks.hoststart.value() };
-    return args_.allowed_hosts.value().contains(std::string{ host });
-}
-void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, const Connection &conn)
-{
-    auto filtered_packets = std::ranges::views::filter(packets, [handle_fake](const Packet &packet) {
-        return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
+    auto filtered_packets = std::ranges::views::filter(packets, [](const Packet &packet) {
+        return !packet.is_fake_blob;
     });
 
     if (!args_.splits.empty()) {
-        std::vector<char> const full_payload = concat(packets, !handle_fake);
-
         for (const auto &split_pos : args_.splits) {
-            auto res = split::split(
-                packets, split::SplitConfig{ .pos = split_pos, .handle_fake = handle_fake }, full_payload, conn);
+            auto res = split::split(packets, split_pos, ctx.markers, ctx.conn.get().payload_proto());
             if (!res) {
                 SPDLOG_WARN(
                     "Wasn't able to split packet at {}:{}, because: {}", split_pos.arg, split_pos.offset, res.error());
@@ -169,47 +159,35 @@ void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, con
     }
 
     if (args_.seq_offset.has_value()) {
-        if (conn.get_l4_proto() == IPPROTO_TCP) {
-            for (auto &packet : filtered_packets) {
-                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                tcp->seq =
-                    htonl(static_cast<std::uint32_t>(static_cast<int>(ntohl(tcp->seq)) + args_.seq_offset.value()));
-                calc_packet_checksum(packet);
-            }
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            sequence_offset(filtered_packets, args_.seq_offset.value());
         } else {
             SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
     }
 
     if (args_.ts_offset.has_value()) {
-        if (conn.get_l4_proto() == IPPROTO_TCP) {
-            for (auto &packet : filtered_packets) {
-                if (!timestamp_val_offset(packet, args_.ts_offset.value())) {
-                    SPDLOG_WARN("Failed to offset timestamp");
-                }
-
-                auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
-                calc_packet_checksum(packet);
-            }
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            timestamp_offset(filtered_packets, args_.ts_offset.value());
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
         }
     }
 
     if (args_.ipv4_ttl.has_value()) {
-        for (auto &packet : filtered_packets) { packet.network_hdr()->ttl = args_.ipv4_ttl.value(); }
+        ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
     }
 
     if (args_.seqovl.has_value()) {
-        if (conn.get_l4_proto() == IPPROTO_TCP) {
-            seqovl(packets, handle_fake, conn);
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            seqovl(packets, ctx);
         } else {
             SPDLOG_WARN("Seqovl is defined but the protocol is not TCP");
         }
     }
 
     if (args_.badcksum) {
-        if (conn.get_l4_proto() == IPPROTO_TCP) {
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
             for (auto &packet : filtered_packets) {
                 auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
                 tcp->check = 0;
@@ -219,15 +197,16 @@ void Disorder::process(std::vector<Packet> &packets, const bool handle_fake, con
             SPDLOG_ERROR("Bad Checksum for protocols other than TCP hasn't been implemented yet");
         }
     }
+
+    if (args_.badcksum) {
+        badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+    }
 }
 
-void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
+void Disorder::modify(std::vector<Packet> &packets, ModifyContext& ctx)
 {
-    if (!check_ip(vec)) { return; }
-    if (!check_host(vec, conn)) { return; }
-
     if (args_.fake_blob.has_value()) {
-        const auto front_view = parse_packet_view(vec.front());
+        const auto front_view = parse_packet_view(packets.front());
 
         Packet new_packet = create_packet_from(front_view, args_.fake_blob.value());
         new_packet.action.action = PacketAction::Action::SEND;
@@ -241,17 +220,17 @@ void Disorder::modify(std::vector<Packet> &vec, const Connection &conn)
             calc_packet_checksum(blob_packets.front());
         }
 
-        process(blob_packets, true, conn);
+        process_fake(blob_packets, ctx);
 
         for (auto &packet : blob_packets) { packet.is_fake_blob = true; }
 
-        vec.insert(
-            vec.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
+        packets.insert(
+            packets.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
     } else {
-        process(vec, false, conn);
+        process_orig(packets, ctx);
     }
 
-    auto reversible = std::ranges::views::filter(vec, [handle_fake = false](const Packet &packet) {
+    auto reversible = std::ranges::views::filter(packets, [handle_fake = false](const Packet &packet) {
         return (handle_fake && packet.is_fake_blob) || (!handle_fake && !packet.is_fake_blob);
     });
     std::reverse(reversible.begin(), reversible.end());// NOLINT

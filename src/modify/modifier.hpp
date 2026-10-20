@@ -6,17 +6,24 @@
 #define WAIWAIDPI_MODIFIER_HPP
 
 #include "conntrack/conn_tracker.hpp"
+#include "markers.hpp"
 #include "net/packet_view.hpp"
 #include <toml++/impl/table.hpp>
 #include <vector>
+
+struct ModifyContext
+{
+    std::vector<char> full_payload;
+    Markers markers;
+    std::reference_wrapper<const Connection> conn;
+};
 
 class IModifier
 {
 public:
     virtual ~IModifier() = default;
 
-    virtual void modify(std::vector<Packet> &vec,
-        const Connection &conn) = 0;// true - successfully processed, false - did nothing
+    virtual void modify(std::vector<Packet>& packets, ModifyContext& ctx) = 0;
     [[nodiscard]] virtual bool matches(const std::vector<Packet> &packets,
         const Connection &conn) const = 0;// used to make sure that these packets can be processed by this modifier
     virtual void parse_config([[maybe_unused]] const toml::table *table) {}
