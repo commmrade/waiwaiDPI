@@ -2,7 +2,7 @@
 // Created by klewy on 8/14/26.
 //
 
-#include "../src/classify/http_classifier.hpp"
+#include "classify/http_classifier.hpp"
 #include "common.hpp"
 #include <catch2/catch_all.hpp>
 
@@ -11,7 +11,7 @@ class HttpTestFixture
 {
 protected:
     ConnTracker tracker;
-    Classifier classifier{tracker};
+    Classifier classifier{};
 
     constexpr static std::size_t ip_hdr_size = 20;
     constexpr static std::size_t tcp_hdr_size = 32;

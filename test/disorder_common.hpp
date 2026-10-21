@@ -4,11 +4,11 @@
 
 #ifndef WAIWAIDPI_DISORDER_COMMON_HPP
 #define WAIWAIDPI_DISORDER_COMMON_HPP
-#include "../src/classifier.hpp"
-#include "../src/classifiers/tls_classifier.hpp"
-#include "../src/conntrack/conn_tracker.hpp"
-#include "../src/modify/disorder.hpp"
-#include "../src/modify/modifier.hpp"
+#include "classify/classifier.hpp"
+#include "classify/tls_classifier.hpp"
+#include "conntrack/conn_tracker.hpp"
+#include "modify/disorder.hpp"
+#include "modify/modifier.hpp"
 #include <catch2/catch_all.hpp>
 #include <toml++/impl/parser.hpp>
 
@@ -16,7 +16,7 @@ class DisorderTestFixture
 {
 protected:
     ConnTracker tracker{};
-    Classifier classifier{tracker};
+    Classifier classifier{};
     Modifier modifier;
 
     std::vector<Packet> packets;

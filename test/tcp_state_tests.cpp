@@ -2,7 +2,7 @@
 // Created by klewy on 8/17/26.
 //
 
-#include "../src/conntrack/conn_tracker.hpp"
+#include "conntrack/conn_tracker.hpp"
 #include <arpa/inet.h>
 #include <catch2/catch_all.hpp>
 #include <cstdint>

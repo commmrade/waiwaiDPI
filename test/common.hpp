@@ -5,8 +5,8 @@
 #ifndef WAIWAIDPI_COMMON_HPP
 #define WAIWAIDPI_COMMON_HPP
 
-#include "../src/classifier.hpp"
-#include "../src/conntrack/conn_tracker.hpp"
+#include "conntrack/conn_tracker.hpp"
+#include "classify/classifier.hpp"
 #include <arpa/inet.h>
 #include <catch2/catch_all.hpp>
 #include <netinet/ip.h>

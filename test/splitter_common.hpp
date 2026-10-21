@@ -5,10 +5,10 @@
 #ifndef WAIWAIDPI_SPLITTER_COMMON_HPP
 #define WAIWAIDPI_SPLITTER_COMMON_HPP
 
-#include "../src/classifiers/http_classifier.hpp"
-#include "../src/classifiers/tls_classifier.hpp"
-#include "../src/modify/splitter.hpp"
-#include "../src/net/checksum.hpp"
+#include "classify/http_classifier.hpp"
+#include "classify/tls_classifier.hpp"
+#include "modify/splitter.hpp"
+#include "net/checksum.hpp"
 #include "common.hpp"
 
 #include <catch2/catch_all.hpp>
