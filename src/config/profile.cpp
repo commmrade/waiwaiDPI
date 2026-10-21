@@ -9,6 +9,8 @@
 #include "modify/splitter.hpp"
 #include "sys/iptables.hpp"
 
+#include <arpa/inet.h>
+
 std::unique_ptr<PayloadClassifier> create_classifier(const std::string_view name, const toml::table *table)
 {
     if (name == TlsHandshakeClassifier::name()) {
@@ -75,6 +77,45 @@ std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>
             throw std::runtime_error("Duplicate port,protocol pair");
         }
 
+        const auto* const allowed_ips_node = profile.second.as_table()->get("allowed_ips");
+        if (allowed_ips_node != nullptr) {
+            std::unordered_set<std::uint32_t> allowed_ips;
+            if (!allowed_ips_node->is_array()) { throw std::runtime_error("allowed_ips must be an array"); }
+
+            const auto *ips_array = allowed_ips_node->as_array();
+            auto& ips = allowed_ips;
+            ips.reserve(ips_array->size());
+
+            for (const auto &node : *ips_array) {
+                if (!node.is_string()) { throw std::runtime_error("All ips must be strings"); }
+
+                const auto addr_str = node.as_string()->get();
+                std::uint32_t addr = 0;
+                int ret = inet_pton(AF_INET, addr_str.data(), &addr);
+                if (ret != 1) { throw std::runtime_error(std::format("Could not convert address '{}'", addr_str)); }
+
+                ips.insert(addr);
+            }
+
+            iter->second.modifier.set_allowed_ips(allowed_ips);
+        }
+
+        const auto *hosts_node = profile.second.as_table()->get("allowed_hosts");
+        if (hosts_node != nullptr) {
+            std::unordered_set<std::string> allowed_hosts;
+            if (!hosts_node->is_array()) { throw std::runtime_error("allowed_hosts must be an array"); }
+
+            const auto *hosts_array = hosts_node->as_array();
+            allowed_hosts.reserve(hosts_array->size());
+            for (const auto &node : *hosts_array) {
+                if (!node.is_string()) { throw std::runtime_error("All hosts must be strings"); }
+
+                allowed_hosts.insert(node.as_string()->get());
+            }
+
+            iter->second.modifier.set_allowed_hosts(allowed_hosts);
+        }
+
         const auto *const classifiers_node = profile.second.as_table()->get("classifiers");
         if (classifiers_node == nullptr) {
             throw std::runtime_error(
@@ -91,7 +132,6 @@ std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>
 
             auto clf = create_classifier(name_opt.value(), classifier_tbl);
             iter->second.classifier.add(std::move(clf));
-            // TODO: add to classifier
         }
 
         const auto modifiers_node = profile.second.as_table()->get("modifiers");

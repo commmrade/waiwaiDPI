@@ -8,6 +8,7 @@
 #include "modify/modifier.hpp"
 #include <print>
 #include <toml++/impl/table.hpp>
+#include <unordered_set>
 
 struct Profile
 {

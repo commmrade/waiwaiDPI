@@ -262,41 +262,6 @@ void Disorder::parse_config(const toml::table *table)
         }
     }
 
-    const auto *hosts_node = table->get("allowed_hosts");
-    if (hosts_node != nullptr) {
-        auto &allowed_hosts = args_.allowed_hosts.emplace();
-
-        if (!hosts_node->is_array()) { throw std::runtime_error("allowed_hosts must be an array"); }
-
-        const auto *hosts_array = hosts_node->as_array();
-        allowed_hosts.reserve(hosts_array->size());
-        for (const auto &node : *hosts_array) {
-            if (!node.is_string()) { throw std::runtime_error("All hosts must be strings"); }
-
-            allowed_hosts.insert(node.as_string()->get());
-        }
-    }
-
-    const auto *ips_node = table->get("allowed_ips");
-    if (ips_node != nullptr) {
-        auto &allowed_ips = args_.allowed_ips.emplace();
-
-        if (!ips_node->is_array()) { throw std::runtime_error("allowed_ips must be an array"); }
-
-        const auto *ips_array = ips_node->as_array();
-        allowed_ips.reserve(ips_array->size());
-        for (const auto &node : *ips_array) {
-            if (!node.is_string()) { throw std::runtime_error("All ips must be strings"); }
-
-            const auto addr_str = node.as_string()->get();
-            std::uint32_t addr = 0;
-            int ret = inet_pton(AF_INET, addr_str.data(), &addr);
-            if (ret != 1) { throw std::runtime_error(std::format("Could not convert address '{}'", addr_str)); }
-
-            allowed_ips.insert(addr);
-        }
-    }
-
     const auto *blob_node = table->get("fake_blob");
     if (blob_node != nullptr) {
         if (!blob_node->is_string()) { throw std::runtime_error("fake_blob must be a string"); }

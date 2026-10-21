@@ -3,9 +3,27 @@
 //
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include <spdlog/spdlog.h>
 #include "modifier.hpp"
 #include "algorithms/common.hpp"
+#include <algorithm>
+#include <spdlog/spdlog.h>
+#include <vector>
+
+bool Modifier::filter(const std::vector<Packet> &packets, std::span<const char> full_payload, const Markers &markers)
+{
+    if (ips_.has_value()) {
+        if (!std::ranges::contains(ips_.value(), packets.front().network_hdr()->saddr)) { return false; }
+    }
+    if (hosts_.has_value()) {
+        if (!markers.hoststart.has_value() || !markers.hostend.has_value()) { return true; }
+
+        const std::string_view host{ full_payload.begin() + static_cast<std::ptrdiff_t>(markers.hoststart.value()),
+            full_payload.begin() + static_cast<std::ptrdiff_t>(markers.hostend.value()) };
+        if (!std::ranges::contains(hosts_.value(), host)) { return false; }
+    }
+
+    return true;
+}
 
 void Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
 {
@@ -16,16 +34,16 @@ void Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
         return;
     }
 
-    ModifyContext ctx {
+    if (!filter(vec, full_payload, markers.value())) { return; }
+
+    ModifyContext ctx{
         .full_payload = full_payload,
         .markers = markers.value(),
         .conn = conn,
     };
 
     for (auto &modifier : modifiers_) {
-        if (!modifier->matches(vec, conn)) {
-            continue;
-        }
+        if (!modifier->matches(vec, conn)) { continue; }
 
         modifier->modify(vec, ctx);
     }
