@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <spdlog/spdlog.h>
 #include <vector>
+#include <ranges>
 
 bool Modifier::filter(const std::vector<Packet> &packets, std::span<const char> full_payload, const Markers &markers)
 {
@@ -27,7 +28,11 @@ bool Modifier::filter(const std::vector<Packet> &packets, std::span<const char> 
 
 void Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
 {
-    auto full_payload = concat(vec);
+    auto filtered_packets = std::ranges::views::filter(vec, [](const Packet &packet) {
+        return !packet.is_fake_blob;
+    });
+
+    auto full_payload = concat(filtered_packets);
     const auto markers = find_markers(full_payload, conn.payload_proto());
     if (!markers) {
         SPDLOG_WARN("Modifier: could not find markers, aborting");

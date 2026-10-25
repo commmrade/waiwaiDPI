@@ -4,9 +4,7 @@
 
 #include "common.hpp"
 #include "net/checksum.hpp"
-#include <algorithm>
 #include <cassert>
-#include <stdexcept>
 
 bool timestamp_val_offset(Packet &packet, const int offset)
 {
@@ -87,67 +85,4 @@ std::vector<Packet>
     }
 
     return splitted;
-}
-
-std::vector<char> concat(std::span<const Packet> packets, const bool skip_fake)
-{
-    if (packets.empty()) { return {}; }
-    if (packets.front().network_hdr()->protocol != IPPROTO_TCP) {
-        throw std::logic_error("Cant concat non tcp segments yet");
-    }
-
-    struct Segment
-    {
-        std::uint32_t seq;
-        std::span<const char> data;
-    };
-
-    std::vector<Segment> segs;
-    segs.reserve(packets.size());
-    for (const auto &pkt : packets) {
-        if (skip_fake && pkt.is_fake_blob) { continue; }
-
-        const auto *tcp = static_cast<const tcphdr *>(pkt.transport_hdr());
-        segs.push_back({ ntohl(tcp->seq), pkt.payload() });
-    }
-    if (segs.empty()) { return {}; }
-
-    const auto seq_lt = [](const std::uint32_t lhs, const std::uint32_t rhs) {
-        return static_cast<std::int32_t>(lhs - rhs) < 0;
-    };
-    std::uint32_t base = segs.front().seq;
-    for (const auto &seg : segs) {
-        if (seq_lt(seg.seq, base)) { base = seg.seq; }
-    }
-
-    std::ranges::stable_sort(segs, {}, [base](const Segment &seg) { return seg.seq - base; });
-
-    std::vector<char> full_payload;
-    for (const auto &seg : segs) {
-        const std::size_t rel = seg.seq - base;
-        auto data = seg.data;
-
-        if (rel + data.size() <= full_payload.size()) { continue; }// целиком перекрыт (или пустой)
-        if (rel > full_payload.size()) { break; }// дырка в потоке
-        data = data.subspan(full_payload.size() - rel);// срезаем перекрытие спереди
-
-        full_payload.insert(full_payload.end(), data.begin(), data.end());
-    }
-
-    return full_payload;
-}
-
-std::vector<char> concat_sorted(std::span<const Packet> packets, const bool skip_fake)
-{
-    std::vector<char> full_payload;
-    for (const auto &pkt : packets) {
-        if (skip_fake && pkt.is_fake_blob) {
-            continue;// do not care about domains in fake blobs
-        }
-
-        const auto payload = pkt.payload();
-        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
-    }
-
-    return full_payload;
 }

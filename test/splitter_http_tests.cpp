@@ -30,6 +30,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split for HTTP works", "[splitter_
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
@@ -56,14 +57,17 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at Header for HTTP works", "[splitt
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = [Markers::HOSTMID_STR]
+    split_at = ["hostmid"]
     )toml";
     build_http_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
+    packet_1_view.packet_id = 143;
+
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
@@ -79,7 +83,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at Header for HTTP works", "[splitt
     REQUIRE(std::string_view{packets.back().payload()}.find("httpforever.com") == std::string_view::npos);
 }
 
-TEST_CASE_METHOD(SplitterTestFixture, "Split at HEaDeR for HTTP works", "[splitter_modifier]")
+TEST_CASE_METHOD(SplitterTestFixture, "Split at HEaDeR (different case) for HTTP works", "[splitter_modifier]")
 {
     constexpr std::string_view config = R"toml(
     [profile.1]
@@ -91,14 +95,17 @@ TEST_CASE_METHOD(SplitterTestFixture, "Split at HEaDeR for HTTP works", "[splitt
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = [Markers::HOSTMID_STR]
+    split_at = ["hostmid"]
     )toml";
     build_http_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_case_span);
+    packet_1_view.packet_id = 142;
+
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
@@ -126,7 +133,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for HTTP works", "[splitte
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = ["2", Markers::HOSTMID_STR]
+    split_at = ["2", "hostmid"]
     )toml";
     build_http_splitter(config);
 
@@ -134,6 +141,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for HTTP works", "[splitte
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());

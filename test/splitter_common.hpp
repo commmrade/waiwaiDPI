@@ -19,7 +19,7 @@ class SplitterTestFixture
 {
 protected:
     ConnTracker tracker{};
-    Classifier classifier{tracker};
+    Classifier classifier{};
     Modifier modifier;
 
     std::vector<Packet> packets;

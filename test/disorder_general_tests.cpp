@@ -29,6 +29,7 @@ TEST_CASE_METHOD(DisorderTestFixture, "Reordering works", "[disorder_modifier]")
     PacketView packet_1_view = parse_packet_view(bytes_span);
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     conn_iter->second.track(packet_1_view);
+    conn_iter->second.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn_iter->second.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 
@@ -67,6 +68,7 @@ TEST_CASE_METHOD(DisorderTestFixture, "Seqovl works correctly if smaller than th
     PacketView packet_1_view = parse_packet_view(bytes_span);
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     conn_iter->second.track(packet_1_view);
+    conn_iter->second.reasm_insert(packet_1_view);
     conn_iter->second.set_mss(1800);
     auto res = classifier.classify(conn_iter->second.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
@@ -105,6 +107,7 @@ TEST_CASE_METHOD(DisorderTestFixture, "Seqovl works correctly if bigger than the
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     conn.set_mss(1800);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
@@ -157,6 +160,7 @@ TEST_CASE_METHOD(DisorderTestFixture, "Fake blob is not reversed", "[disorder_mo
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     conn.set_mss(1800);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
@@ -211,14 +215,17 @@ TEST_CASE_METHOD(DisorderTestFixture, "Host check works on original data, not fa
     conn.set_mss(1800);
 
     conn.track(pkt_1);
+    conn.reasm_insert(pkt_1);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(pkt_2);
+    conn.reasm_insert(pkt_2);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(pkt_3);
+    conn.reasm_insert(pkt_3);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());

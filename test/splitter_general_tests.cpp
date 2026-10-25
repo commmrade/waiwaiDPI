@@ -28,6 +28,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Bad Checksum parameter", "[splitter_modif
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 
@@ -69,6 +70,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Sequence offset parameter", "[splitter_mo
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 
@@ -147,6 +149,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Timestamp offset parameter", "[splitter_m
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 
@@ -186,6 +189,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "IPv4 TTL parameter", "[splitter_modifier]
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 
@@ -227,6 +231,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob priority over original data", "[spli
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 
@@ -270,6 +275,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Blob and original data are affected by se
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 
@@ -313,6 +319,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for fake blob", "[splitter_modifie
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     conn.set_mss(1440);
 
     auto res = classifier.classify(conn.reasm_get());
@@ -354,6 +361,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for original data", "[splitter_mod
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     conn.set_mss(1800);
 
     auto res = classifier.classify(conn.reasm_get());
@@ -396,6 +404,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for both fake and original data", 
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     conn.set_mss(1800);
 
     auto res = classifier.classify(conn.reasm_get());
@@ -435,6 +444,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl segmentation", "[splitter_modifier
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     conn.set_mss(1571 + 24); // payload is 1571 bytes
 
     auto res = classifier.classify(conn.reasm_get());
@@ -484,6 +494,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Host check works on original data, not fa
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     conn.set_mss(1800);
 
     auto res = classifier.classify(conn.reasm_get());

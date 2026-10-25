@@ -29,6 +29,7 @@ TEST_CASE_METHOD(TlsTestFixture, "Full TLS is classified correctly", "[tls_class
     auto conn_iter = tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port(), pkt.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(pkt);
+    conn.reasm_insert(pkt);
 
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
@@ -74,10 +75,12 @@ TEST_CASE_METHOD(TlsTestFixture, "Split TLS is classified correctly", "[tls_clas
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
+    conn.reasm_insert(first_pkt);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
+    conn.reasm_insert(second_pkt);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
@@ -103,14 +106,17 @@ TEST_CASE_METHOD(TlsTestFixture, "In-Order TLS segments", "[tls_classifier]")
     auto& conn = conn_iter->second;
 
     conn.track(pkt_1);
+    conn.reasm_insert(pkt_1);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(pkt_2);
+    conn.reasm_insert(pkt_2);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(pkt_3);
+    conn.reasm_insert(pkt_3);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }
@@ -125,6 +131,7 @@ TEST_CASE_METHOD(TlsTestFixture, "Out-of-Order TLS segments", "[tls_classifier]"
     auto& conn = conn_iter->second;
 
     conn.track(pkt_3);
+    conn.reasm_insert(pkt_3);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::ERROR);  // <- adjust
 }

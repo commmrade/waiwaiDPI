@@ -65,6 +65,7 @@ TEST_CASE_METHOD(HttpTestFixture, "Full HTTP is classified correctly", "[http_cl
     auto conn_iter = tracker.get_conn(pkt.network_hdr->saddr, pkt.get_source_port(), pkt.network_hdr->daddr, pkt.get_dest_port(), pkt.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(pkt);
+    conn.reasm_insert(pkt);
 
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
@@ -83,10 +84,12 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP is classified correctly", "[http_c
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
+    conn.reasm_insert(first_pkt);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
+    conn.reasm_insert(second_pkt);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }
@@ -102,10 +105,12 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at headers end", "[http_classifier
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
+    conn.reasm_insert(first_pkt);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
+    conn.reasm_insert(second_pkt);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }
@@ -121,10 +126,12 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at Host Header", "[http_classifier
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
+    conn.reasm_insert(first_pkt);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
+    conn.reasm_insert(second_pkt);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }
@@ -140,10 +147,12 @@ TEST_CASE_METHOD(HttpTestFixture, "Split HTTP at Host Header Value", "[http_clas
     auto& conn = conn_iter->second;
 
     conn.track(first_pkt);
+    conn.reasm_insert(first_pkt);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::REASSEMBLING);  // <- adjust
 
     conn.track(second_pkt);
+    conn.reasm_insert(second_pkt);
     res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 }

@@ -26,6 +26,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split for TLS works", "[splitter_m
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
@@ -60,6 +61,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for TLS works", "[splitter
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
@@ -95,6 +97,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Allowed hosts works for TLS specified hos
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
     conn.set_payload_proto(res.second.value());
@@ -130,6 +133,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Allowed hosts does not work for TLS speci
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
+    conn.reasm_insert(packet_1_view);
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
 
