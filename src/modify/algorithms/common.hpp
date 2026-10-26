@@ -78,6 +78,14 @@ template<std::ranges::range Range>
 std::vector<char> concat_sorted(const Range& packets)
 {
     std::vector<char> full_payload;
+
+    std::size_t payload_size = 0;
+    for (const auto& pkt : packets) {
+        payload_size += pkt.payload().size();
+    }
+
+    full_payload.reserve(payload_size);
+
     for (const auto &pkt : packets) {
         const auto payload = pkt.payload();
         full_payload.insert(full_payload.end(), payload.begin(), payload.end());
