@@ -151,6 +151,9 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
                 int ret = send_verdict(ctx->sock, ctx->queue_number, pkt.action.packet_id, NF_ACCEPT);
                 if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", pkt.action.packet_id); }
             }
+
+            int ret = send_verdict(ctx->sock, ctx->queue_number, packet.packet_id, NF_ACCEPT);
+            if (ret < 0) { SPDLOG_WARN("Unable to accept packet with id: {}", packet.packet_id); }
         }
     } else {
         SPDLOG_DEBUG("Packet {} is dropped immediately (no payload or connection is done)", packet.packet_id);

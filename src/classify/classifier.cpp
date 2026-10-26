@@ -45,7 +45,7 @@ std::pair<ClassifyResult, std::optional<L7Proto>> Classifier::classify(const std
         }
     }
 
-    if (reasm_counter) { return { ClassifyResult::REASSEMBLING, std::nullopt }; }
+    if (reasm_counter > 0) { return { ClassifyResult::REASSEMBLING, std::nullopt }; }
 
     return { ClassifyResult::ERROR, std::nullopt };
 }
