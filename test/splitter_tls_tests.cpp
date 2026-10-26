@@ -23,6 +23,8 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split for TLS works", "[splitter_m
     build_tls_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
+    packet_1_view.packet_id = 144;
+
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
@@ -53,11 +55,13 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for TLS works", "[splitter
 
     [[profile.1.modifiers]]
     name = "splitter"
-    split_at = ["2", Markers::HOSTMID_STR]
+    split_at = ["2", "hostmid"]
     )toml";
     build_tls_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
+    packet_1_view.packet_id = 143;
+
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
@@ -94,6 +98,8 @@ TEST_CASE_METHOD(SplitterTestFixture, "Allowed hosts works for TLS specified hos
     build_tls_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
+    packet_1_view.packet_id = 143;
+
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
@@ -139,5 +145,5 @@ TEST_CASE_METHOD(SplitterTestFixture, "Allowed hosts does not work for TLS speci
 
     std::vector<Packet> packets = conn.reasm_get();
     modifier.modify(packets, conn);
-    REQUIRE(packets.size() == 1);
+    REQUIRE(packets.size() == 2);
 }

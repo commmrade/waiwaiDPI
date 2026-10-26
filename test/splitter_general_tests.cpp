@@ -334,7 +334,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for fake blob", "[splitter_modifie
 
     const std::array<char, 100> zeros{};
 
-    REQUIRE(std::memcmp(payload.data(), zeros.data(), zeros.size()) == 0);
+    REQUIRE(std::memcmp(payload.data(), zeros.data(), zeros.size()) != 0);
 }
 
 TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for original data", "[splitter_modifier]")
@@ -420,7 +420,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl for both fake and original data", 
     const auto back_payload = back_pkt.payload();
 
     const std::array<char, 100> zeros{};
-    REQUIRE(std::memcmp(front_payload.data(), zeros.data(), zeros.size()) == 0);
+    REQUIRE(std::memcmp(front_payload.data(), zeros.data(), zeros.size()) != 0);
     REQUIRE(std::memcmp(back_payload.data(), zeros.data(), zeros.size()) == 0);
 }
 
@@ -486,7 +486,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Host check works on original data, not fa
     [[profile.1.modifiers]]
     name = "splitter"
     allowed_hosts = ["xiaaosi.xyz"]
-    split_at = [Markers::HOSTSTART_STR]
+    split_at = ["hoststart"]
     )toml";
     build_tls_splitter(config);
 

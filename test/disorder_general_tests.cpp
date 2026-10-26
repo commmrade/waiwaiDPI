@@ -202,7 +202,7 @@ TEST_CASE_METHOD(DisorderTestFixture, "Host check works on original data, not fa
     [[profile.1.modifiers]]
     name = "disorder"
     allowed_hosts = ["patriotvepen.me"]
-    split_at = [Markers::HOSTSTART_STR]
+    split_at = ["hoststart"]
     )toml";
     build_disorder(config);
 

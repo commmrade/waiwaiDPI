@@ -27,6 +27,8 @@ TEST_CASE_METHOD(SplitterTestFixture, "Single Split for HTTP works", "[splitter_
     build_http_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
+    packet_1_view.packet_id = 144;
+
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
@@ -138,6 +140,8 @@ TEST_CASE_METHOD(SplitterTestFixture, "Multiple Split for HTTP works", "[splitte
     build_http_splitter(config);
 
     PacketView packet_1_view = parse_packet_view(bytes_span);
+    packet_1_view.packet_id = 143;
+
     auto conn_iter = tracker.get_conn(packet_1_view.network_hdr->saddr, packet_1_view.get_source_port(), packet_1_view.network_hdr->daddr, packet_1_view.get_dest_port(), packet_1_view.network_hdr->protocol);
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
