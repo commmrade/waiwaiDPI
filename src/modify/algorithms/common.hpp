@@ -40,8 +40,8 @@ std::vector<char> concat(Range& packets)
     std::vector<Segment> segs;
     segs.reserve(std::distance(packets.begin(), packets.end()));
     for (const auto &pkt : packets) {
-        const auto *tcp = static_cast<const tcphdr *>(pkt.transport_hdr());
-        segs.push_back({ ntohl(tcp->seq), pkt.payload() });
+        // TODO: will fire for udp quic
+        segs.push_back({ pkt.get_seq().value(), pkt.payload() });
     }
     if (segs.empty()) { return {}; }
 

@@ -67,6 +67,7 @@ add_executable(tests
         splitter_http_tests.cpp
         disorder_general_tests.cpp
         disorder_common.hpp
+        quic_test.cpp
 )
 
 target_include_directories(tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
