@@ -5,8 +5,8 @@
 #ifndef WAIWAIDPI_SPLITTER_HPP
 #define WAIWAIDPI_SPLITTER_HPP
 
-#include "args.hpp"
-#include "modifier.hpp"
+#include "../args.hpp"
+#include "../modifier.hpp"
 #include <unordered_set>
 
 class Splitter : public IModifier

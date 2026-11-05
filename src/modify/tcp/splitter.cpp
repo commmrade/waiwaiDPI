@@ -4,10 +4,10 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "splitter.hpp"
+#include "../algorithms/common.hpp"
+#include "../algorithms/split.hpp"
+#include "../markers.hpp"
 #include "net/checksum.hpp"
-#include "algorithms/common.hpp"
-#include "algorithms/split.hpp"
-#include "markers.hpp"
 #include "spdlog/spdlog.h"
 #include <arpa/inet.h>
 #include <filesystem>

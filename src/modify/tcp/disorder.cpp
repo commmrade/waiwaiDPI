@@ -3,12 +3,12 @@
 //
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include "disorder.hpp"
+#include "modify/tcp/disorder.hpp"
+#include "modify/algorithms/common.hpp"
+#include "modify/algorithms/split.hpp"
+#include "modify/args.hpp"
+#include "modify/markers.hpp"
 #include "net/checksum.hpp"
-#include "algorithms/common.hpp"
-#include "algorithms/split.hpp"
-#include "args.hpp"
-#include "markers.hpp"
 #include "spdlog/spdlog.h"
 #include <arpa/inet.h>
 #include <iostream>

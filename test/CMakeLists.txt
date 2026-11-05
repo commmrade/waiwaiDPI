@@ -48,12 +48,12 @@ add_executable(tests
         ../src/classify/classifier.cpp
         ../src/conntrack/conn_tracker.cpp
         ../src/net/packet_view.cpp
-        ../src/classify/http_classifier.cpp
-        ../src/classify/tls_classifier.cpp
+        ../src/classify/tcp/http_classifier.cpp
+        ../src/classify/tcp/tls_classifier.cpp
         ../src/net/checksum.cpp
         ../src/modify/modifier.cpp
-        ../src/modify/splitter.cpp
-        ../src/modify/disorder.cpp
+        ../src/modify/tcp/splitter.cpp
+        ../src/modify/tcp/disorder.cpp
         ../src/modify/algorithms/split.cpp
         ../src/sys/nfq.cpp
         ../src/modify/args.cpp

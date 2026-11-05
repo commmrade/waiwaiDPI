@@ -3,10 +3,10 @@
 //
 
 #include "profile.hpp"
-#include "classify/http_classifier.hpp"
-#include "classify/tls_classifier.hpp"
-#include "modify/disorder.hpp"
-#include "modify/splitter.hpp"
+#include "../classify/tcp/http_classifier.hpp"
+#include "../classify/tcp/tls_classifier.hpp"
+#include "../modify/tcp/disorder.hpp"
+#include "../modify/tcp/splitter.hpp"
 #include "sys/iptables.hpp"
 
 #include <arpa/inet.h>

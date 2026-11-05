@@ -5,8 +5,8 @@
 #ifndef WAIWAIDPI_DISORDER_HPP
 #define WAIWAIDPI_DISORDER_HPP
 
-#include "args.hpp"
-#include "modifier.hpp"
+#include "../args.hpp"
+#include "../modifier.hpp"
 #include <unordered_set>
 
 class Disorder : public IModifier
