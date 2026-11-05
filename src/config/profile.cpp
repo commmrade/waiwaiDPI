@@ -11,31 +11,69 @@
 
 #include <arpa/inet.h>
 
-std::unique_ptr<PayloadClassifier> create_classifier(const std::string_view name, const toml::table *table)
+#define LIST_CLASSIFIER_TYPES TlsHandshakeClassifier, HttpClassifier
+#define LIST_MODIFIER_TYPES Splitter, Disorder
+
+template<typename ... Ts>
+std::unique_ptr<PayloadClassifier> create_classifier_impl(const std::string_view name, const int transport_proto)
 {
-    if (name == TlsHandshakeClassifier::name()) {
-        auto ret = std::make_unique<TlsHandshakeClassifier>();
-        ret->parse_config(table);
-        return ret;
-    } else if (name == HttpClassifier::name()) {
-        auto ret = std::make_unique<HttpClassifier>();
-        ret->parse_config(table);
-        return ret;
-    } else {
-        throw std::runtime_error(std::format("Unknown classifier name: '{}'", name));
-    }
+    std::unique_ptr<PayloadClassifier> ret;
+
+    auto try_one = [&]<typename T> {
+        if (ret || name != T::name()) {
+            return;
+        }
+        if (transport_proto != T::transport_protocol()) {
+            throw std::runtime_error(std::format("{} protocol is not supported for {}", transport_proto, name));
+        }
+
+        ret = std::make_unique<T>();
+    };
+
+    (try_one.template operator()<Ts>(), ...);
+    return ret;
 }
 
-std::unique_ptr<IModifier> create_modifier(const std::string_view name, const toml::table *table)
+std::unique_ptr<PayloadClassifier> create_classifier(const std::string_view name, const int transport_proto, const toml::table *table)
+{
+    auto ret = create_classifier_impl<LIST_CLASSIFIER_TYPES>(name, transport_proto);
+
+    if (!ret) {
+        throw std::runtime_error(std::format("There is no '{}' classifier", name));
+    }
+
+    ret->parse_config(table);
+    return ret;
+}
+
+
+template<typename ... Ts>
+std::unique_ptr<IModifier> create_modifier_impl(const std::string_view name, const int transport_proto)
 {
     std::unique_ptr<IModifier> ret;
 
-    if (name == Splitter::name()) {
-        ret = std::make_unique<Splitter>();
-    } else if (name == Disorder::name()) {
-        ret = std::make_unique<Disorder>();
-    } else {
-        throw std::runtime_error(std::format("Unknown modifier name: '{}'", name));
+    auto try_one = [&]<typename T> {
+        if (ret || name != T::name()) {
+            return;
+        }
+        if (transport_proto != T::transport_protocol()) {
+            throw std::runtime_error(std::format("{} protocol is not supported for {}", transport_proto, name));
+        }
+
+        ret = std::make_unique<T>();
+    };
+
+    (try_one.template operator()<Ts>(), ...);
+
+    return ret;
+}
+
+std::unique_ptr<IModifier> create_modifier(const std::string_view name, const int transport_proto, const toml::table *table)
+{
+    auto ret = create_modifier_impl<LIST_MODIFIER_TYPES>(name, transport_proto);
+
+    if (!ret) {
+        throw std::runtime_error(std::format("There is no '{}' modifier", name));
     }
 
     ret->parse_config(table);
@@ -43,7 +81,7 @@ std::unique_ptr<IModifier> create_modifier(const std::string_view name, const to
 }
 
 std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>
-    build_profiles(const std::string_view cfg_path, [[maybe_unused]] ConnTracker &tracker, const std::uint32_t queue_number)
+    build_profiles(const std::string_view cfg_path, [[maybe_unused]] const ConnTracker &tracker, const std::uint32_t queue_number)
 {
     toml::table tbl = toml::parse_file(cfg_path);
     const toml::table *profiles = tbl["profile"].as_table();
@@ -130,7 +168,7 @@ std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>
                     std::format("Classifier name is not defined in profile '{}'", profile.first.str()));
             }
 
-            auto clf = create_classifier(name_opt.value(), classifier_tbl);
+            auto clf = create_classifier(name_opt.value(), protocol, classifier_tbl);
             iter->second.classifier.add(std::move(clf));
         }
 
@@ -147,7 +185,7 @@ std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>
                     std::format("Classifier name is not defined in profile '{}'", profile.first.str()));
             }
 
-            auto mdf = create_modifier(name_opt.value(), modifier_tbl);
+            auto mdf = create_modifier(name_opt.value(), protocol, modifier_tbl);
             iter->second.modifier.add(std::move(mdf));
         }
 

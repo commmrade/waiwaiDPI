@@ -24,19 +24,19 @@ class Splitter : public IModifier
         std::optional<std::vector<char>> seqovl_pat;
     } args_;
 
-    // bool check_ip(const std::vector<Packet> &packets) const;
-    // bool check_host(const ModifyContext& ctx) const;
-
-    void process_fake(std::vector<Packet> &packets, ModifyContext& ctx);
-    void process_orig(std::vector<Packet>& packets, ModifyContext& ctx);
+    void process_fake(std::vector<Packet> &packets, ModifyContext &ctx);
+    void process_orig(std::vector<Packet> &packets, ModifyContext &ctx);
 
     void seqovl(std::vector<Packet> &packets, const Connection &conn);
+
 public:
-    void modify(std::vector<Packet> &packets, ModifyContext& ctx) override;
+    void modify(std::vector<Packet> &packets, ModifyContext &ctx) override;
     [[nodiscard]] bool matches(const std::vector<Packet> &packets, const Connection &conn) const override;
     void parse_config(const toml::table *table) override;
 
+    // For profile building
     [[nodiscard]] static constexpr std::string_view name() { return std::string_view{ "splitter" }; }
+    [[nodiscard]] static constexpr int transport_protocol() { return IPPROTO_TCP; }
 };
 
 

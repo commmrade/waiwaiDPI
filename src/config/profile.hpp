@@ -25,8 +25,8 @@ struct pair_hash
     }
 };
 
-std::unique_ptr<PayloadClassifier> create_classifier(const std::string_view name, const toml::table* table);
-std::unique_ptr<IModifier> create_modifier(const std::string_view name, const toml::table* table);
-std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> build_profiles(const std::string_view cfg_path, ConnTracker& tracker, const std::uint32_t queue_number);
+std::unique_ptr<PayloadClassifier> create_classifier(const std::string_view name, const int transport_proto, const toml::table* table);
+std::unique_ptr<IModifier> create_modifier(const std::string_view name, const int transport_proto, const toml::table* table);
+std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash> build_profiles(const std::string_view cfg_path, const ConnTracker& tracker, const std::uint32_t queue_number);
 
 #endif// WAIWAIDPI_PROFILE_HPP
