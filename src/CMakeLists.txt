@@ -45,6 +45,8 @@ add_executable(main main.cpp
         modify/udp/udplen.hpp
         classify/udp/quic_classifier.cpp
         classify/udp/quic_classifier.hpp
+        conntrack/reassembler.cpp
+        conntrack/reassembler.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})

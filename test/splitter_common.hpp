@@ -7,7 +7,7 @@
 
 #include "../src/classify/tcp/http_classifier.hpp"
 #include "../src/modify/tcp/splitter.hpp"
-#include "classify/tls_classifier.hpp"
+#include "classify/tcp/tls_classifier.hpp"
 #include "common.hpp"
 #include "net/checksum.hpp"
 

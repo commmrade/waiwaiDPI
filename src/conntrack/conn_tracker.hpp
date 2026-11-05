@@ -6,6 +6,7 @@
 #define WAIWAIDPI_CONN_TRACKER_HPP
 #include "net/packet_view.hpp"
 #include "net/protocol.hpp"
+#include "reassembler.hpp"
 #include "util/hash.hpp"
 #include <chrono>
 #include <cstdint>
@@ -44,13 +45,6 @@ private:
 
     L7Proto payload_proto_{ L7Proto::UNKNOWN };
 
-    struct
-    {
-        std::vector<Packet> segs;
-    } reasm_;
-    void reasm_sort();
-    bool reasm_is_duplicate(const PacketView& pkt);
-
     std::uint32_t saddr_{};
 
     std::uint8_t l4_proto_{};
@@ -58,6 +52,7 @@ private:
 
     bool is_done_{ false };// should this connection be handled later on? FIX: TEMPORARY (hopefully)
 
+    Reassembler reasm_;
 
     void track_tcp(const PacketView &packet);
     void track_udp(const PacketView &packet);
@@ -91,7 +86,7 @@ public:
 
     void reasm_reset();
     void reasm_insert(const PacketView& pkt);
-    [[nodiscard]] const std::vector<Packet> &reasm_get() const { return reasm_.segs; }
+    [[nodiscard]] const std::vector<Packet> &reasm_get() const { return reasm_.get(); }
 
 
     [[nodiscard]] std::size_t bytes_transfered() const { return pl_bytes_transfered_; }
