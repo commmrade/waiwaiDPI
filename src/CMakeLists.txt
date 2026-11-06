@@ -1,6 +1,7 @@
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MNL REQUIRED libmnl)
 pkg_check_modules(NETFILTER_QUEUE REQUIRED libnetfilter_queue)
+pkg_check_modules(CRYPTOPP REQUIRED IMPORTED_TARGET libcryptopp)
 
 add_executable(main main.cpp
         classify/classifier.hpp
@@ -47,6 +48,10 @@ add_executable(main main.cpp
         classify/udp/quic_classifier.hpp
         conntrack/reassembler.cpp
         conntrack/reassembler.hpp
+        net/quic.cpp
+        net/quic.hpp
+        net/encrypt.cpp
+        net/encrypt.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
@@ -59,7 +64,9 @@ target_link_libraries(
           argh
           tomlplusplus
           ${MNL_LIBRARIES}
-          ${NETFILTER_QUEUE_LIBRARIES})
+          ${NETFILTER_QUEUE_LIBRARIES}
+          PkgConfig::CRYPTOPP
+)
 
 
 waiwaiDPI_configure_linker(main)

@@ -69,6 +69,8 @@ add_executable(tests
         disorder_common.hpp
         quic_test.cpp
         ../src/conntrack/reassembler.cpp
+        ../src/net/quic.cpp
+        ../src/net/quic.hpp
 )
 
 target_include_directories(tests PRIVATE "${CMAKE_SOURCE_DIR}/src")

@@ -94,6 +94,7 @@ int cb_loop(const struct nlmsghdr *nlh, void *data)
 
         assert(!packets.empty());
         auto res = profile.classifier.classify(packets);
+        std::println("classify quic: {}", (int)res.first);
         if (res.first == ClassifyResult::DONE) {
             conn.set_payload_proto(res.second.value());
             conn.reasm_reset();
