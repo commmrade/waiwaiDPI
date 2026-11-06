@@ -39,6 +39,85 @@ std::vector<std::uint8_t> reassemble(const std::map<std::uint64_t, std::vector<s
     return out;
 }
 
+std::span<const std::uint8_t> extract_quic(std::span<const std::uint8_t>& quic_packets)
+{
+    if (quic_packets.empty()) {
+        return {};
+    }
+
+    const auto hdr = parse_quic(quic_packets);
+    const auto packet_len = packet_length(hdr);
+
+    if (quic_packets.size() < packet_len) {
+        return {};
+    }
+
+    const auto quic = quic_packets.subspan(0, packet_len);
+    quic_packets = quic_packets.subspan(packet_len);
+
+    return quic;
+}
+
+bool parse_payload_quic(std::span<const std::uint8_t> payload, std::map<std::uint64_t, std::vector<std::uint8_t>>& tls)
+{
+    while (!payload.empty()) {
+        const auto type = read_varint(payload);
+        if (!type) {
+            return false;
+        }
+
+        switch (*type) {
+        case 0x00:// PADDING
+        case 0x01:// PING
+            break;
+
+        case 0x02:// ACK
+        case 0x03: {// ACK_ECN
+            const auto largest = read_varint(payload);
+            const auto delay = read_varint(payload);
+            const auto range_count = read_varint(payload);
+            const auto first_range = read_varint(payload);
+            if (!largest || !delay || !range_count || !first_range) {
+                return false;
+            }
+            for (std::uint64_t i = 0; i < *range_count; ++i) {
+                if (!read_varint(payload) || !read_varint(payload)) {
+                    return false;
+                }
+            }
+            if (*type == 0x03) {
+                for (int i = 0; i < 3; ++i) {
+                    if (!read_varint(payload)) {
+                        return false;
+                    }
+                }
+            }
+            break;
+        }
+
+        case 0x06: {// CRYPTO
+            const auto off = read_varint(payload);
+            const auto len = read_varint(payload);
+            if (!off || !len || payload.size() < *len) {
+                return false;
+            }
+
+            const auto data = payload.first(*len);
+            auto &chunk = tls[*off];
+            if (chunk.size() < data.size()) {
+                chunk.assign(data.begin(), data.end());// keep longest on retransmit
+            }
+            payload = payload.subspan(*len);
+            break;
+        }
+
+        default:
+            return false;
+        }
+    }
+
+    return true;
+}
 }// namespace
 
 std::expected<ClassifyResult, std::string> QuicClassifier::classify_tls(const std::vector<std::uint8_t> &payload)
@@ -63,69 +142,25 @@ std::expected<ClassifyResult, std::string> QuicClassifier::classify_tls(const st
 
     return { ClassifyResult::DONE };
 }
+
 std::expected<ClassifyResult, std::string> QuicClassifier::classify(const std::vector<char> &full_payload)
 {
-    std::map<std::uint64_t, std::vector<std::uint8_t>> tls;// crypto offset -> data
+    std::map<std::uint64_t, std::vector<std::uint8_t>> tls; // crypto offset -> data
 
     std::span<const std::uint8_t> quic_packets{ reinterpret_cast<const std::uint8_t *>(full_payload.data()),
         full_payload.size() };
 
-    do {
-        auto hdr = parse_packet(quic_packets);
-        const auto packet_len = packet_length(hdr);
-        const auto quic = quic_packets.subspan(0, packet_len);
-        quic_packets = quic_packets.subspan(packet_len);
-
+    std::span<const std::uint8_t> quic;
+    while (!(quic = extract_quic(quic_packets)).empty()) {
         const auto decrypted_vec = decrypt_quic(quic);
-        const std::span<const std::uint8_t> decrypted = decrypted_vec;
-        hdr = parse_packet(decrypted);
+        const auto decrypted = std::span<const std::uint8_t>{decrypted_vec};
+        const auto hdr = parse_quic(decrypted);
 
         auto payload = decrypted.subspan(hdr.payload_offset);
-
-        while (!payload.empty()) {
-            const auto type = read_varint(payload);
-            if (!type) return std::unexpected("truncated frame type");
-
-            switch (*type) {
-            case 0x00:// PADDING
-            case 0x01:// PING
-                break;
-
-            case 0x02:// ACK
-            case 0x03: {// ACK_ECN
-                const auto largest = read_varint(payload);
-                const auto delay = read_varint(payload);
-                const auto range_count = read_varint(payload);
-                const auto first_range = read_varint(payload);
-                if (!largest || !delay || !range_count || !first_range) return std::unexpected("bad ACK frame");
-                for (std::uint64_t i = 0; i < *range_count; ++i) {
-                    if (!read_varint(payload) || !read_varint(payload)) return std::unexpected("bad ACK range");
-                }
-                if (*type == 0x03) {
-                    for (int i = 0; i < 3; ++i) {
-                        if (!read_varint(payload)) return std::unexpected("bad ACK ECN counts");
-                    }
-                }
-                break;
-            }
-
-            case 0x06: {// CRYPTO
-                const auto off = read_varint(payload);
-                const auto len = read_varint(payload);
-                if (!off || !len || payload.size() < *len) return std::unexpected("bad CRYPTO frame");
-
-                const auto data = payload.first(*len);
-                auto &chunk = tls[*off];
-                if (chunk.size() < data.size()) chunk.assign(data.begin(), data.end());// keep longest on retransmit
-                payload = payload.subspan(*len);
-                break;
-            }
-
-            default:
-                return std::unexpected(std::format("unexpected frame type 0x{:x} in Initial", *type));
-            }
+        if (!parse_payload_quic(payload, tls)) {
+            break;
         }
-    } while (!quic_packets.empty());
+    }
 
     const auto client_hello = reassemble(tls);
     return classify_tls(client_hello);

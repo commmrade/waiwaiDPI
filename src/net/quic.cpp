@@ -34,7 +34,7 @@ constexpr std::array<const std::uint8_t, 20> initial_salt = {
     0x0a,
 };
 
-QuicInitialHdr parse_packet(std::span<const std::uint8_t> quic)
+QuicInitialHdr parse_quic(std::span<const std::uint8_t> quic)
 {
     const auto init = quic;
 
@@ -102,12 +102,12 @@ QuicInitialHdr parse_packet(std::span<const std::uint8_t> quic)
 
 std::vector<std::uint8_t> decrypt_quic(std::span<const std::uint8_t> packet)
 {
-    const auto init_hdr = parse_packet(packet);
+    const auto init_hdr = parse_quic(packet);
     const auto init_secret = hkdf_extract(initial_salt, init_hdr.dest_conn_id);
     const auto client_init_secret = hkdf_expand_label(init_secret, "client in", {}, 32);
 
     auto decrypted = lift_header_prot(packet, client_init_secret, init_hdr);
-    const auto decrypted_hdr = parse_packet(decrypted);
+    const auto decrypted_hdr = parse_quic(decrypted);
     decrypted = lift_packet_prot(decrypted, client_init_secret, decrypted_hdr);
 
     return decrypted;

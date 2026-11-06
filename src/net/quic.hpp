@@ -19,7 +19,7 @@ struct QuicInitialHdr {
     std::size_t packet_number_off;
     std::size_t payload_offset;
 };
-QuicInitialHdr parse_packet(std::span<const std::uint8_t> quic);
+QuicInitialHdr parse_quic(std::span<const std::uint8_t> quic);
 
 std::vector<std::uint8_t> decrypt_quic(std::span<const std::uint8_t> packet);
 
