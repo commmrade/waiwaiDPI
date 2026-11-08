@@ -78,12 +78,6 @@ add_executable(tests
 
 target_include_directories(tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
 
-# FIXME: TEMP
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(MNL REQUIRED libmnl)
-pkg_check_modules(NETFILTER_QUEUE REQUIRED libnetfilter_queue)
-pkg_check_modules(CRYPTOPP REQUIRED IMPORTED_TARGET libcryptopp)
-
 target_link_libraries(
   tests
   PRIVATE waiwaiDPI::waiwaiDPI_warnings
@@ -93,7 +87,7 @@ target_link_libraries(
           ${MNL_LIBRARIES}
           ${NETFILTER_QUEUE_LIBRARIES}
           Catch2::Catch2WithMain
-          PkgConfig::CRYPTOPP
+          cryptopp::cryptopp
 )
 
 waiwaiDPI_configure_linker(tests)

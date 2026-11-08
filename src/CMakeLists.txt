@@ -1,7 +1,6 @@
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MNL REQUIRED libmnl)
 pkg_check_modules(NETFILTER_QUEUE REQUIRED libnetfilter_queue)
-pkg_check_modules(CRYPTOPP REQUIRED IMPORTED_TARGET libcryptopp)
 
 add_executable(main main.cpp
         classify/classifier.hpp
@@ -65,9 +64,8 @@ target_link_libraries(
           tomlplusplus
           ${MNL_LIBRARIES}
           ${NETFILTER_QUEUE_LIBRARIES}
-          PkgConfig::CRYPTOPP
+          cryptopp::cryptopp
 )
-
 
 waiwaiDPI_configure_linker(main)
 

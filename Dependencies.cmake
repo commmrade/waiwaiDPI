@@ -70,4 +70,14 @@ function(waiwaiDPI_setup_dependencies)
       "main")
   endif()
 
+  if(NOT TARGET cryptopp::cryptopp)
+    cpmaddpackage(
+      NAME
+      cryptopp-cmake
+      GITHUB_REPOSITORY
+      "abdes/cryptopp-cmake"
+      GIT_TAG
+      "CRYPTOPP_8_9_0")
+  endif()
+
 endfunction()
