@@ -6,17 +6,66 @@
 #define WAIWAIDPI_COMMON_HPP
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include <spdlog/spdlog.h>
 #include "net/packet_view.hpp"
-#include <span>
+#include "net/protocol.hpp"
+#include "net/quic.hpp"
+#include <spdlog/spdlog.h>
 #include <algorithm>
+#include <span>
 
 bool timestamp_val_offset(Packet &packet, const int offset);
 std::vector<Packet>
     segmentize(std::span<const char> full_payload, unsigned long mss, const Packet &orig_packet, unsigned start_seq);
 
+
 template<std::ranges::range Range>
-std::vector<char> concat(Range& packets)
+std::vector<char> concat_sorted(Range& packets)
+{
+    std::vector<char> full_payload;
+
+    std::size_t payload_size = 0;
+    for (const auto& pkt : packets) {
+        payload_size += pkt.payload().size();
+    }
+
+    full_payload.reserve(payload_size);
+
+    for (const auto pkt : packets) {
+        const auto& payload = pkt.payload();
+        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
+    }
+
+    return full_payload;
+}
+
+template<std::ranges::range Range>
+std::vector<char> concat_quic(Range& packets)
+{
+    const auto full_payload = concat_sorted(packets);
+    std::span<const std::uint8_t> quic_packets{ reinterpret_cast<const std::uint8_t *>(full_payload.data()),
+            full_payload.size(), };
+
+    std::map<std::uint64_t, std::vector<std::uint8_t>> tls;
+
+    std::span<const std::uint8_t> quic;
+    while (!(quic = extract_quic(quic_packets)).empty()) { //NOLINT
+        const auto decrypted_vec = decrypt_quic(quic);
+        const auto decrypted = std::span<const std::uint8_t>{decrypted_vec};
+        const auto hdr = parse_quic(decrypted);
+
+        auto payload = decrypted.subspan(hdr.payload_offset);
+        if (!parse_payload_quic(payload, tls)) {
+            break;
+        }
+    }
+
+    const auto client_hello = quic_reassemble(tls);
+    std::vector<char> ret(client_hello.begin(), client_hello.end());
+    return ret;
+}
+
+template<std::ranges::range Range>
+std::vector<char> concat_tcp(Range& packets)
 {
     bool is_empty = false;
     if constexpr (requires { packets.empty(); }) {
@@ -27,13 +76,10 @@ std::vector<char> concat(Range& packets)
     }
 
     if (is_empty) { return {}; }
-    if (packets.front().network_hdr()->protocol != IPPROTO_TCP) {
-        throw std::logic_error("Cant concat non tcp segments yet");
-    }
 
     struct Segment
     {
-        std::uint32_t seq;
+        std::uint32_t seq{};
         std::span<const char> data;
     };
 
@@ -74,25 +120,17 @@ std::vector<char> concat(Range& packets)
 }
 
 template<std::ranges::range Range>
-std::vector<char> concat_sorted(const Range& packets)
+std::vector<char> concat(Range& packets, const L7Proto payload_proto)
 {
-    std::vector<char> full_payload;
-
-    std::size_t payload_size = 0;
-    for (const auto& pkt : packets) {
-        payload_size += pkt.payload().size();
+    if (packets.front().network_hdr()->protocol == IPPROTO_TCP) {
+        return concat_tcp(packets);
+    } else if (payload_proto == L7Proto::QUIC) {
+        return concat_quic(packets);
+    } else {
+        SPDLOG_DEBUG("Did not concat anything");
+        return {};
     }
-
-    full_payload.reserve(payload_size);
-
-    for (const auto &pkt : packets) {
-        const auto payload = pkt.payload();
-        full_payload.insert(full_payload.end(), payload.begin(), payload.end());
-    }
-
-    return full_payload;
 }
-
 
 template<std::ranges::range Range>
 void ipv4_ttl(Range& packets, const std::uint8_t ttl)

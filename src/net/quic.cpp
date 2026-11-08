@@ -154,3 +154,91 @@ std::vector<std::uint8_t> lift_packet_prot(std::span<const std::uint8_t> packet,
 
     return quic;
 }
+std::uint64_t quic_packet_length(const QuicInitialHdr &hdr) { return hdr.packet_number_off + hdr.length; }
+std::optional<std::uint64_t> quic_read_varint(std::span<const std::uint8_t> &s)
+{
+    if (s.empty()) return std::nullopt;
+    const std::size_t len = std::size_t{ 1 } << (s[0] >> 6);
+    if (s.size() < len) return std::nullopt;
+    std::uint64_t v = s[0] & 0x3f;
+    for (std::size_t i = 1; i < len; ++i) v = (v << 8) | s[i];
+    s = s.subspan(len);
+    return v;
+}
+std::vector<std::uint8_t> quic_reassemble(const std::map<std::uint64_t, std::vector<std::uint8_t>> &chunks)
+{
+    std::vector<std::uint8_t> out;
+    std::uint64_t next = 0;
+    for (const auto &[off, data] : chunks) {
+        if (off > next) break;// gap, data not yet received
+        if (off + data.size() <= next) continue;// fully duplicate
+        const auto skip = static_cast<std::ptrdiff_t>(next - off);
+        out.insert(out.end(), data.begin() + skip, data.end());
+        next = off + data.size();
+    }
+    return out;
+}
+std::span<const std::uint8_t> extract_quic(std::span<const std::uint8_t> &quic_packets)
+{
+    if (quic_packets.empty()) { return {}; }
+
+    const auto hdr = parse_quic(quic_packets);
+    const auto packet_len = quic_packet_length(hdr);
+
+    if (quic_packets.size() < packet_len) { return {}; }
+
+    const auto quic = quic_packets.subspan(0, packet_len);
+    quic_packets = quic_packets.subspan(packet_len);
+
+    return quic;
+}
+bool parse_payload_quic(std::span<const std::uint8_t> payload, std::map<std::uint64_t, std::vector<std::uint8_t>> &tls)
+{
+    while (!payload.empty()) {
+        const auto type = quic_read_varint(payload);
+        if (!type) { return false; }
+
+        switch (*type) {
+        case 0x00:// PADDING
+        case 0x01:// PING
+            break;
+
+        case 0x02:// ACK
+        case 0x03: {// ACK_ECN
+            const auto largest = quic_read_varint(payload);
+            const auto delay = quic_read_varint(payload);
+            const auto range_count = quic_read_varint(payload);
+            const auto first_range = quic_read_varint(payload);
+            if (!largest || !delay || !range_count || !first_range) { return false; }
+            for (std::uint64_t i = 0; i < *range_count; ++i) {
+                if (!quic_read_varint(payload) || !quic_read_varint(payload)) { return false; }
+            }
+            if (*type == 0x03) {
+                for (int i = 0; i < 3; ++i) {
+                    if (!quic_read_varint(payload)) { return false; }
+                }
+            }
+            break;
+        }
+
+        case 0x06: {// CRYPTO
+            const auto off = quic_read_varint(payload);
+            const auto len = quic_read_varint(payload);
+            if (!off || !len || payload.size() < *len) { return false; }
+
+            const auto data = payload.first(*len);
+            auto &chunk = tls[*off];
+            if (chunk.size() < data.size()) {
+                chunk.assign(data.begin(), data.end());// keep longest on retransmit
+            }
+            payload = payload.subspan(*len);
+            break;
+        }
+
+        default:
+            return false;
+        }
+    }
+
+    return true;
+}

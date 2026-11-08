@@ -69,11 +69,20 @@ add_executable(tests
         disorder_common.hpp
         quic_test.cpp
         ../src/conntrack/reassembler.cpp
+        ../src/net/encrypt.cpp
         ../src/net/quic.cpp
         ../src/net/quic.hpp
+        ../src/classify/udp/quic_classifier.cpp
+        quic_classifier_tests.cpp
 )
 
 target_include_directories(tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+
+# FIXME: TEMP
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MNL REQUIRED libmnl)
+pkg_check_modules(NETFILTER_QUEUE REQUIRED libnetfilter_queue)
+pkg_check_modules(CRYPTOPP REQUIRED IMPORTED_TARGET libcryptopp)
 
 target_link_libraries(
   tests
@@ -83,7 +92,9 @@ target_link_libraries(
           tomlplusplus
           ${MNL_LIBRARIES}
           ${NETFILTER_QUEUE_LIBRARIES}
-          Catch2::Catch2WithMain)
+          Catch2::Catch2WithMain
+          PkgConfig::CRYPTOPP
+)
 
 waiwaiDPI_configure_linker(tests)
 

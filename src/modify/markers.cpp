@@ -35,11 +35,13 @@ std::expected<Markers, std::string> find_markers_tls(std::span<const char> paylo
 {
     Markers ret;
     // it is guaranteed to be a tls handshake (because of the classifier), nothing else is guaranteed besides that
-    constexpr auto tls_handshake_type = 0x16;
+    // but it either may start from Record Header, or Client Hello (Handshake header)
+    constexpr auto tls_handshake_record = 0x16;
     const auto initial = payload;
 
-    // content stuff
-    payload = payload.subspan(5);// skip header bytes, get to content
+    if (payload.front() == 0x16) { // it is a record header
+        payload = payload.subspan(5);
+    }
 
     // from now on i need to do all the checks, because classifier checks just the header (first 5 bytes)
     if (payload[0] != 0x01) {// content type is not clienthello
@@ -131,14 +133,11 @@ std::expected<Markers, std::string> find_markers_tls(std::span<const char> paylo
 
 std::expected<Markers, std::string> find_markers(std::span<const char> payload, const L7Proto payload_proto)
 {
-    switch (payload_proto) {
-    case L7Proto::TLS: {
+    if (payload_proto == L7Proto::TLS || payload_proto == L7Proto::QUIC) {
         return find_markers_tls(payload);
-    }
-    case L7Proto::HTTP: {
+    } else if (payload_proto == L7Proto::HTTP) {
         return find_markers_http(payload);
-    }
-    default:
+    } else {
         return Markers{};
-    };
+    }
 }

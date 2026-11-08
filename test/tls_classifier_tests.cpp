@@ -13,7 +13,7 @@ class TlsTestFixture
 {
 protected:
     ConnTracker tracker{};
-    Classifier classifier{};
+    Classifier classifier;
 
     Context ctx;
 public:

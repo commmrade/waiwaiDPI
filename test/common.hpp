@@ -2,8 +2,6 @@
 // Created by klewy on 8/14/26.
 //
 
-#ifndef WAIWAIDPI_COMMON_HPP
-#define WAIWAIDPI_COMMON_HPP
 
 #include "conntrack/conn_tracker.hpp"
 #include "classify/classifier.hpp"
@@ -44,4 +42,3 @@ inline std::vector<char> construct_packet_from(std::span<const char> payload, co
 }
 
 
-#endif// WAIWAIDPI_COMMON_HPP

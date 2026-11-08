@@ -175,20 +175,20 @@ std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>
 
         const auto modifiers_node = profile.second.as_table()->get("modifiers");
         if (modifiers_node == nullptr) {
-            // throw std::runtime_error(std::format("Modifier nae not not defined in profile '{}'", profile.first.str()));
+            throw std::runtime_error(std::format("Modifier nae not not defined in profile '{}'", profile.first.str()));
         }
 
-        // for (const auto &modifier : *modifiers_node->as_array()) {
-        //     const auto modifier_tbl = modifier.as_table();
-        //     const auto name_opt = modifier_tbl->get("name")->as_string()->value_exact<std::string>();
-        //     if (!name_opt.has_value()) {
-        //         throw std::runtime_error(
-        //             std::format("Classifier name is not defined in profile '{}'", profile.first.str()));
-        //     }
-        //
-        //     auto mdf = create_modifier(name_opt.value(), protocol, modifier_tbl);
-        //     iter->second.modifier.add(std::move(mdf));
-        // }
+        for (const auto &modifier : *modifiers_node->as_array()) {
+            const auto modifier_tbl = modifier.as_table();
+            const auto name_opt = modifier_tbl->get("name")->as_string()->value_exact<std::string>();
+            if (!name_opt.has_value()) {
+                throw std::runtime_error(
+                    std::format("Classifier name is not defined in profile '{}'", profile.first.str()));
+            }
+
+            auto mdf = create_modifier(name_opt.value(), protocol, modifier_tbl);
+            iter->second.modifier.add(std::move(mdf));
+        }
 
 
         // set up a rule
