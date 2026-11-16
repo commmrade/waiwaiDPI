@@ -5,8 +5,8 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "classify/classifier.hpp"
+#include "../modify/common.hpp"
 #include "conntrack/conn_tracker.hpp"
-#include "modify/algorithms/common.hpp"
 #include <cassert>
 #include <cstdint>
 #include <cstring>

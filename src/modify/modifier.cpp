@@ -4,11 +4,11 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "modifier.hpp"
-#include "algorithms/common.hpp"
+#include "common.hpp"
 #include <algorithm>
+#include <ranges>
 #include <spdlog/spdlog.h>
 #include <vector>
-#include <ranges>
 
 bool Modifier::filter(const std::vector<Packet> &packets, std::span<const char> full_payload, const Markers &markers)
 {

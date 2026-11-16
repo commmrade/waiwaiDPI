@@ -29,15 +29,15 @@ add_executable(main main.cpp
         modify/args.hpp
         modify/tcp/splitter.cpp
         modify/tcp/splitter.hpp
-        modify/algorithms/split.cpp
-        modify/algorithms/split.hpp
+        modify/split.cpp
+        modify/split.hpp
         sys/iface.hpp
         sys/iface.cpp
         modify/tcp/disorder.cpp
         modify/tcp/disorder.hpp
         modify/args.cpp
-        modify/algorithms/common.cpp
-        modify/algorithms/common.hpp
+        modify/common.cpp
+        modify/common.hpp
         modify/markers.cpp
         modify/markers.hpp
         util/safespan.hpp
@@ -51,8 +51,10 @@ add_executable(main main.cpp
         net/quic.hpp
         net/encrypt.cpp
         net/encrypt.hpp
-        modify/fake.cpp
-        modify/fake.hpp
+        modify/common/fake.cpp
+        modify/common/fake.hpp
+        modify/fooling.cpp
+        modify/fooling.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})

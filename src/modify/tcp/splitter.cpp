@@ -4,9 +4,10 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "splitter.hpp"
-#include "../algorithms/common.hpp"
-#include "../algorithms/split.hpp"
+#include "../common.hpp"
 #include "../markers.hpp"
+#include "../split.hpp"
+#include "modify/fooling.hpp"
 #include "net/checksum.hpp"
 #include "spdlog/spdlog.h"
 #include <arpa/inet.h>
@@ -21,12 +22,12 @@ void Splitter::process_fake(std::vector<Packet> &packets, ModifyContext &ctx)
     });
 
     if (args_.ipv4_ttl.has_value()) {
-        ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
+        fooling::ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
     }
 
     if (args_.ts_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            timestamp_offset(filtered_packets, args_.ts_offset.value());
+            fooling::timestamp_offset(filtered_packets, args_.ts_offset.value());
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
         }
@@ -34,14 +35,14 @@ void Splitter::process_fake(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (args_.seq_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            sequence_offset(filtered_packets, args_.seq_offset.value());
+            fooling::sequence_offset(filtered_packets, args_.seq_offset.value());
         } else {
             SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
     }
 
     if (args_.badcksum) {
-        badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+        fooling::badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
     }
 }
 
@@ -62,12 +63,12 @@ void Splitter::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
     }
 
     if (args_.ipv4_ttl.has_value()) {
-        ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
+        fooling::ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
     }
 
     if (args_.ts_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            timestamp_offset(filtered_packets, args_.ts_offset.value());
+            fooling::timestamp_offset(filtered_packets, args_.ts_offset.value());
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
         }
@@ -83,14 +84,14 @@ void Splitter::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (args_.seq_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            sequence_offset(filtered_packets, args_.seq_offset.value());
+            fooling::sequence_offset(filtered_packets, args_.seq_offset.value());
         } else {
             SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
     }
 
     if (args_.badcksum) {
-        badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+        fooling::badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
     }
 }
 

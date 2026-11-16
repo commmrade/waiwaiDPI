@@ -3,15 +3,15 @@
 //
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include <spdlog/spdlog.h>
 #include "split.hpp"
-#include "net/checksum.hpp"
 #include "modify/markers.hpp"
+#include "net/checksum.hpp"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <print>
 #include <ranges>
+#include <spdlog/spdlog.h>
 
 namespace helpers {
 
