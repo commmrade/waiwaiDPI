@@ -7,6 +7,6 @@
 #include "packet_view.hpp"
 
 void calc_packet_checksum(Packet& pkt);
-std::uint16_t calc_tcp_checksum(const Packet& pkt);
+std::uint16_t calc_transport_checksum(const Packet& pkt);
 
 #endif// WAIWAIDPI_CHECKSUM_HPP

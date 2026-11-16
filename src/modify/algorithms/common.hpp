@@ -174,7 +174,11 @@ void badchecksum(Range& packets, const int l4_proto)
             tcp->check = htonl(rand() % 256);
         }
     } else {
-        SPDLOG_ERROR("Bad Checksum for protocols other than TCP hasn't been implemented yet");
+        for (auto& packet : packets) {
+            auto* udp = static_cast<udphdr*>(packet.transport_hdr());
+            udp->check = 0;
+            udp->check = htonl(rand() % 256);
+        }
     }
 }
 
