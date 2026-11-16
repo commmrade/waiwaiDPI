@@ -2,7 +2,7 @@
 // Created by klewy on 8/14/26.
 //
 
-#include "classify/tls_classifier.hpp"
+#include "../src/classify/tcp/tls_classifier.hpp"
 #include "common.hpp"
 #include <catch2/catch_all.hpp>
 
@@ -13,7 +13,7 @@ class TlsTestFixture
 {
 protected:
     ConnTracker tracker{};
-    Classifier classifier{};
+    Classifier classifier;
 
     Context ctx;
 public:

@@ -34,7 +34,7 @@ std::pair<ClassifyResult, std::optional<L7Proto>> Classifier::classify(const std
             }
             case ClassifyResult::REASSEMBLING: {
                 ++reasm_counter;
-                continue;
+                break;
             }
             default: {
                 break;

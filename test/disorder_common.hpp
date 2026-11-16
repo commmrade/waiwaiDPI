@@ -4,10 +4,10 @@
 
 #ifndef WAIWAIDPI_DISORDER_COMMON_HPP
 #define WAIWAIDPI_DISORDER_COMMON_HPP
+#include "../src/classify/tcp/tls_classifier.hpp"
+#include "../src/modify/tcp/disorder.hpp"
 #include "classify/classifier.hpp"
-#include "classify/tls_classifier.hpp"
 #include "conntrack/conn_tracker.hpp"
-#include "modify/disorder.hpp"
 #include "modify/modifier.hpp"
 #include <catch2/catch_all.hpp>
 #include <toml++/impl/parser.hpp>

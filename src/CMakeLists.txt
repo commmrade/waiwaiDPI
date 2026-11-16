@@ -13,10 +13,10 @@ add_executable(main main.cpp
         net/consts.hpp
         net/packet_view.hpp
         net/packet_view.cpp
-        classify/http_classifier.cpp
-        classify/http_classifier.hpp
-        classify/tls_classifier.cpp
-        classify/tls_classifier.hpp
+        classify/tcp/http_classifier.cpp
+        classify/tcp/http_classifier.hpp
+        classify/tcp/tls_classifier.cpp
+        classify/tcp/tls_classifier.hpp
         modify/modifier.hpp
         net/checksum.cpp
         net/checksum.hpp
@@ -27,20 +27,30 @@ add_executable(main main.cpp
         sys/iptables.cpp
         sys/iptables.hpp
         modify/args.hpp
-        modify/splitter.cpp
-        modify/splitter.hpp
+        modify/tcp/splitter.cpp
+        modify/tcp/splitter.hpp
         modify/algorithms/split.cpp
         modify/algorithms/split.hpp
         sys/iface.hpp
         sys/iface.cpp
-        modify/disorder.cpp
-        modify/disorder.hpp
+        modify/tcp/disorder.cpp
+        modify/tcp/disorder.hpp
         modify/args.cpp
         modify/algorithms/common.cpp
         modify/algorithms/common.hpp
         modify/markers.cpp
         modify/markers.hpp
         util/safespan.hpp
+        modify/udp/udplen.cpp
+        modify/udp/udplen.hpp
+        classify/udp/quic_classifier.cpp
+        classify/udp/quic_classifier.hpp
+        conntrack/reassembler.cpp
+        conntrack/reassembler.hpp
+        net/quic.cpp
+        net/quic.hpp
+        net/encrypt.cpp
+        net/encrypt.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})
@@ -53,8 +63,9 @@ target_link_libraries(
           argh
           tomlplusplus
           ${MNL_LIBRARIES}
-          ${NETFILTER_QUEUE_LIBRARIES})
-
+          ${NETFILTER_QUEUE_LIBRARIES}
+          cryptopp::cryptopp
+)
 
 waiwaiDPI_configure_linker(main)
 

@@ -2,7 +2,7 @@
 // Created by klewy on 8/14/26.
 //
 
-#include "classify/http_classifier.hpp"
+#include "../src/classify/tcp/http_classifier.hpp"
 #include "common.hpp"
 #include <catch2/catch_all.hpp>
 

@@ -32,8 +32,9 @@ void Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
         return !packet.is_fake_blob;
     });
 
-    auto full_payload = concat(filtered_packets);
+    auto full_payload = concat(filtered_packets, conn.payload_proto());
     const auto markers = find_markers(full_payload, conn.payload_proto());
+
     if (!markers) {
         SPDLOG_WARN("Modifier: could not find markers, aborting");
         return;
