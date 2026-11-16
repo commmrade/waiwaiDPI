@@ -11,13 +11,15 @@ void calc_packet_checksum(Packet &pkt)
     if (pkt.network_hdr()->protocol == IPPROTO_TCP) {
         auto *tcp = static_cast<tcphdr *>(pkt.transport_hdr());
         tcp->check = 0;
-        tcp->check = calc_tcp_checksum(pkt);
+        tcp->check = calc_transport_checksum(pkt);
     } else {
-        throw std::logic_error("UDP checksums aren't implemented yet");
+        auto* udp = static_cast<udphdr*>(pkt.transport_hdr());
+        udp->check = 0;
+        udp->check = calc_transport_checksum(pkt);
     }
 }
 
-std::uint16_t calc_tcp_checksum(const Packet &pkt)
+std::uint16_t calc_transport_checksum(const Packet &pkt)
 {
     struct pseudo_hdr
     {
@@ -25,18 +27,18 @@ std::uint16_t calc_tcp_checksum(const Packet &pkt)
         std::uint32_t dst;
         std::uint8_t zero;
         std::uint8_t proto;
-        std::uint16_t tcp_len;
+        std::uint16_t len;
     } __attribute__((packed));
 
-    const auto *tcp = static_cast<const tcphdr *>(pkt.transport_hdr());
+    const auto pkt_hdr_size = static_cast<std::size_t>(pkt.payload_offset - pkt.transport_offset);
     const auto payload = pkt.payload();
 
     pseudo_hdr phdr{};
     phdr.src = pkt.network_hdr()->saddr;
     phdr.dst = pkt.network_hdr()->daddr;
     phdr.zero = 0;
-    phdr.proto = IPPROTO_TCP;
-    phdr.tcp_len = htons(static_cast<std::uint16_t>((tcp->doff * 4) + payload.size()));
+    phdr.proto = pkt.network_hdr()->protocol;
+    phdr.len = htons(static_cast<std::uint16_t>(pkt_hdr_size + payload.size()));
 
     std::uint32_t sum = 0;
 
@@ -54,7 +56,7 @@ std::uint16_t calc_tcp_checksum(const Packet &pkt)
     };
 
     add_bytes(reinterpret_cast<const char *>(&phdr), sizeof(phdr));
-    add_bytes(reinterpret_cast<const char *>(tcp), tcp->doff * 4);
+    add_bytes(reinterpret_cast<const char *>(pkt.transport_hdr()), pkt_hdr_size);
     add_bytes(payload.data(), payload.size());
 
     while (sum >> 16) { sum = (sum & 0xFFFF) + (sum >> 16); }

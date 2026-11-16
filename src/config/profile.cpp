@@ -3,17 +3,18 @@
 //
 
 #include "profile.hpp"
-#include "../classify/tcp/http_classifier.hpp"
-#include "../classify/tcp/tls_classifier.hpp"
-#include "../modify/tcp/disorder.hpp"
-#include "../modify/tcp/splitter.hpp"
-#include "../classify/udp/quic_classifier.hpp"
+#include "classify/tcp/http_classifier.hpp"
+#include "classify/tcp/tls_classifier.hpp"
+#include "modify/tcp/disorder.hpp"
+#include "modify/tcp/splitter.hpp"
+#include "modify/fake.hpp"
+#include "classify/udp/quic_classifier.hpp"
 #include "sys/iptables.hpp"
 
 #include <arpa/inet.h>
 
 #define LIST_CLASSIFIER_TYPES TlsHandshakeClassifier, HttpClassifier, QuicClassifier
-#define LIST_MODIFIER_TYPES Splitter, Disorder
+#define LIST_MODIFIER_TYPES Splitter, Disorder, Fake
 
 template<typename ... Ts>
 std::unique_ptr<PayloadClassifier> create_classifier_impl(const std::string_view name, const int transport_proto)
@@ -57,8 +58,8 @@ std::unique_ptr<IModifier> create_modifier_impl(const std::string_view name, con
         if (ret || name != T::name()) {
             return;
         }
-        if (transport_proto != T::transport_protocol()) {
-            throw std::runtime_error(std::format("{} protocol is not supported for {}", transport_proto, name));
+        if ((static_cast<unsigned>(transport_proto) & static_cast<unsigned>(T::transport_protocol())) == 0) {
+            throw std::runtime_error(std::format("{} protocol is not supported for modifier {}", transport_proto, name));
         }
 
         ret = std::make_unique<T>();

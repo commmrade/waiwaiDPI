@@ -51,6 +51,8 @@ add_executable(main main.cpp
         net/quic.hpp
         net/encrypt.cpp
         net/encrypt.hpp
+        modify/fake.cpp
+        modify/fake.hpp
 )
 
 target_include_directories(main PUBLIC ${MNL_INCLUDE_DIRS} ${NETFILTER_QUEUE_INCLUDE_DIRS})

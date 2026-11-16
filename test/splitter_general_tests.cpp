@@ -41,7 +41,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Bad Checksum parameter", "[splitter_modif
         auto cksum = tcp->check;
 
         tcp->check = 0;
-        tcp->check = calc_tcp_checksum(packet);
+        tcp->check = calc_transport_checksum(packet);
 
         REQUIRE(cksum != tcp->check);
     }
