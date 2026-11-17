@@ -23,6 +23,7 @@ class Splitter : public IModifier
         std::optional<L7Proto> l7_payload;
         std::optional<int> seqovl;
         std::optional<std::vector<char>> seqovl_pat;
+        std::optional<int> repeats;
     } args_;
 
     void process_fake(std::vector<Packet> &packets, ModifyContext &ctx);

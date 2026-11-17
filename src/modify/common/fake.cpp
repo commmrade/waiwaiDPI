@@ -61,7 +61,9 @@ void Fake::modify(std::vector<Packet> &packets, ModifyContext &ctx)
     new_packet.action.packet_id = 0;
 
     std::vector<Packet> blob_packets;
-    for (auto i = 0; i < args_.repeats.value_or(1); ++i) {
+    const auto fake_n = static_cast<std::size_t>(args_.repeats.value_or(1));
+    blob_packets.reserve(fake_n);
+    for (std::size_t i = 0; i < fake_n; ++i) {
         blob_packets.push_back(new_packet);
         blob_packets.back().is_fake_blob = true;
         calc_packet_checksum(blob_packets.back());
@@ -72,7 +74,7 @@ void Fake::modify(std::vector<Packet> &packets, ModifyContext &ctx)
     packets.insert(
         packets.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
 }
-bool Fake::matches(const std::vector<Packet> &packets, const Connection &conn) const
+bool Fake::matches([[maybe_unused]] const std::vector<Packet> &packets, [[maybe_unused]] const Connection &conn) const
 {
     return true;
 }

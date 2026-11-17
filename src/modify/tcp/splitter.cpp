@@ -182,13 +182,15 @@ void Splitter::modify(std::vector<Packet> &packets, ModifyContext& ctx)
         new_packet.action.packet_id = 0;
 
         std::vector<Packet> blob_packets;
-        blob_packets.push_back(std::move(new_packet));
-        blob_packets.front().is_fake_blob = true;
-        calc_packet_checksum(blob_packets.front());
+        const auto fake_n = static_cast<std::size_t>(args_.repeats.value_or(1));
+        blob_packets.reserve(fake_n);
+        for (std::size_t i = 0; i < fake_n; ++i) {
+            blob_packets.push_back(new_packet);
+            blob_packets.back().is_fake_blob = true;
+            calc_packet_checksum(blob_packets.back());
+        }
 
         process_fake(blob_packets, ctx);
-
-        for (auto &packet : blob_packets) { packet.is_fake_blob = true; }
 
         packets.insert(
             packets.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
@@ -290,5 +292,14 @@ void Splitter::parse_config(const toml::table *table)
         }
 
         args_.tcp_md5 = tcp_md5_node->as_boolean()->get();
+    }
+
+    const auto* repeats_node = table->get("repeats");
+    if (repeats_node != nullptr) {
+        if (!repeats_node->is_number()) {
+            throw std::runtime_error("'repeats' must be a number");
+        }
+
+        args_.repeats.emplace(repeats_node->as_integer()->get());
     }
 }
