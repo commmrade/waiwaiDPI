@@ -18,6 +18,7 @@ class Splitter : public IModifier
         bool badcksum{ false };
         std::optional<int> seq_offset;
         std::optional<int> ts_offset;
+        bool tcp_md5{false};
         std::optional<std::uint8_t> ipv4_ttl;
         std::optional<L7Proto> l7_payload;
         std::optional<int> seqovl;

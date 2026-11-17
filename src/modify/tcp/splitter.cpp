@@ -44,6 +44,14 @@ void Splitter::process_fake(std::vector<Packet> &packets, ModifyContext &ctx)
     if (args_.badcksum) {
         fooling::badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
     }
+
+    if (args_.tcp_md5) {
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            fooling::tcp_md5(filtered_packets);
+        } else {
+            SPDLOG_ERROR("TCP MD5 is used only for TCP");
+        }
+    }
 }
 
 void Splitter::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
@@ -92,6 +100,14 @@ void Splitter::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (args_.badcksum) {
         fooling::badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+    }
+
+    if (args_.tcp_md5) {
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            fooling::tcp_md5(filtered_packets);
+        } else {
+            SPDLOG_ERROR("TCP MD5 is used only for TCP");
+        }
     }
 }
 
@@ -265,5 +281,14 @@ void Splitter::parse_config(const toml::table *table)
 
         auto buf = parse_blob(seqovl_ptrn_node->as_string()->get());
         args_.seqovl_pat.emplace(std::move(buf));
+    }
+
+    const auto* tcp_md5_node = table->get("tcp_md5");
+    if (tcp_md5_node != nullptr) {
+        if (!tcp_md5_node->is_boolean()) {
+            throw std::runtime_error("tcp_md5 must be a boolean");
+        }
+
+        args_.tcp_md5 = tcp_md5_node->as_boolean()->get();
     }
 }

@@ -72,7 +72,7 @@ struct TcpMd5Opt
 {
     std::uint8_t kind{TCP_MD5_OPT_KIND};
     std::uint8_t length{TCP_MD5_OPT_LEN};
-    std::array<char, TCP_MD5_OPT_LEN - 2> data{};
+    std::array<char, TCP_MD5_OPT_LEN - 2> data{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 };
 #pragma pack(pop)
 
@@ -125,7 +125,7 @@ void tcp_md5(Range& packets)
         const std::size_t extend_n = new_size - tcp_opts_size;                   // always a multiple of 4
 
         // Extend the options by extend_n and go backwards EOL count bytes to get to the start of MD5 option, which is after the last non-EOL option
-        auto md_iter = packet.packet.insert(packet.packet.begin() + packet.payload_offset, extend_n, 0);
+        auto md_iter = packet.packet.insert(std::next(packet.packet.begin(), packet.payload_offset), extend_n, 0);
         md_iter -= eol_count;
 
         TcpMd5Opt const opt{};
