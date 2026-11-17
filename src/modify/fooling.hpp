@@ -6,8 +6,10 @@
 #define WAIWAIDPI_FOOLINGS_HPP
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-#include "spdlog/spdlog.h"
+#include "net/checksum.hpp"
 #include "net/packet_view.hpp"
+#include "spdlog/spdlog.h"
+#include <cstring>
 #include <ranges>
 
 namespace fooling {
@@ -63,59 +65,79 @@ void badchecksum(Range& packets, const int l4_proto)
     }
 }
 
+constexpr auto TCP_MD5_OPT_KIND = 19;
+constexpr auto TCP_MD5_OPT_LEN = 18;
+#pragma pack(push, 1)
+struct TcpMd5Opt
+{
+    std::uint8_t kind{TCP_MD5_OPT_KIND};
+    std::uint8_t length{TCP_MD5_OPT_LEN};
+    std::array<char, TCP_MD5_OPT_LEN - 2> data{};
+};
+#pragma pack(pop)
+
+static std::size_t count_eols(std::span<const char> opts)
+{
+    std::size_t ret = 0;
+    while (!opts.empty()) {
+        const auto kind = static_cast<std::uint8_t>(opts[0]);
+        if (kind == 0) {
+            ++ret;
+            opts = opts.subspan(1);
+            continue;
+        } else if (kind == 1) {
+            opts = opts.subspan(1);
+            continue;
+        }
+
+        const auto len = static_cast<std::uint8_t>(opts[1]);
+        if (opts.size() < len) {
+            break;
+        }
+
+        opts = opts.subspan(len);
+    }
+
+    return ret;
+}
+
 template<std::ranges::range Range>
 void tcp_md5(Range& packets)
 {
-    // Mind that when you add an option it should be padded (with EOL Kind 0) for the size of a packet to be at 32-bit word boundary
-    // there may be padding between options to align values that are inside the options to 16-bit,32-bit boundary
-
     for (auto& packet : packets) {
         const auto tcp_opts_start = packet.transport_offset + sizeof(tcphdr);
-        auto tcp_opts_end = packet.payload_offset;
+        const auto tcp_opts_end = packet.payload_offset;
         const auto tcp_opts_size = tcp_opts_end - tcp_opts_start;
+        std::span<const char> tcp_opts{std::next(packet.packet.data(), tcp_opts_start), tcp_opts_size};
 
+        // Check how many EOL options
+        const auto eol_count = count_eols(tcp_opts);
+        constexpr std::size_t TCP_OPTIONS_MAX_SIZE = 40;
 
-        // i wanna modify it in-place
-        // so first I should get rid of all the padding in the end
-        // then i wanna insert the tcp_md5 options
-        // and padd options again
-        // as an optimizaion later, i might just extend the padding as a first step and then write over the padding, so it is less steps
+        const std::size_t used     = tcp_opts_size - eol_count;                  // real options, no padding
+        const std::size_t new_size = (used + TCP_MD5_OPT_LEN + 3) & ~std::size_t{3};
 
-        assert(tcp_opts_end <= packet.packet.size());
-        std::span<const char> tcp_opts{packet.packet.data() + tcp_opts_start, tcp_opts_size};
-        int zeros = 0;
-        for (auto i = static_cast<int>(tcp_opts.size() - 1); i >= 0; --i) {
-            zeros += static_cast<int>(tcp_opts[i]) == 0;
+        if (new_size > TCP_OPTIONS_MAX_SIZE) {
+            SPDLOG_ERROR("TCP options too long to add MD5 option");
+            continue;                                                            // not return
         }
 
-        // extend TCP opts.
-        constexpr auto TCP_MD5_OPT_SIZE = 18;
-        const int extend_n = TCP_MD5_OPT_SIZE + (4 - (zeros % 4));
-        auto md5_iter = packet.packet.insert(packet.packet.begin() + tcp_opts_end, extend_n, 0);
-        tcp_opts_end += extend_n;
+        const std::size_t extend_n = new_size - tcp_opts_size;                   // always a multiple of 4
 
-        // overwrite TCP opts
+        // Extend the options by extend_n and go backwards EOL count bytes to get to the start of MD5 option, which is after the last non-EOL option
+        auto md_iter = packet.packet.insert(packet.packet.begin() + packet.payload_offset, extend_n, 0);
+        md_iter -= eol_count;
 
-        constexpr auto TCP_MD5_OPT_KIND = 19;
-        constexpr auto TCP_MD5_OPT_LEN = 18;
+        TcpMd5Opt const opt{};
+        std::memcpy(std::addressof(*md_iter), &opt, sizeof(opt));
+        // Fill the MD5 option. Padding at the end stays there
 
-        *md5_iter = TCP_MD5_OPT_KIND; // Set Kind to TCP MD5
-        ++md5_iter;
-
-        *md5_iter = TCP_MD5_OPT_LEN;
-        ++md5_iter;
-
-        const auto end_opts_iter = packet.packet.begin() + tcp_opts_end;
-        for (; md5_iter != end_opts_iter; ++md5_iter) {
-            *md5_iter = 0;
-        }
-
-        auto* ip = static_cast<iphdr*>(packet.network_hdr());
-        auto* tcp = static_cast<tcphdr *>(packet.transport_hdr());
-
-        packet.payload_offset = tcp_opts_end;
+        // Update all the fields
+        packet.payload_offset += extend_n;
+        packet.network_hdr()->tot_len = htons(ntohs(packet.network_hdr()->tot_len) + extend_n);
+        auto* tcp = static_cast<tcphdr*>(packet.transport_hdr());
         tcp->doff += extend_n / 4;
-        SPDLOG_DEBUG("INSERTED {} EXTEND n", extend_n);
+        calc_packet_checksum(packet);
     }
 }
 
