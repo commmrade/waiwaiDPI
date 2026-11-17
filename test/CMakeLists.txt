@@ -73,6 +73,7 @@ add_executable(tests
         ../src/net/quic.cpp
         ../src/net/quic.hpp
         ../src/classify/udp/quic_classifier.cpp
+        ../src/modify/fooling.cpp
         quic_classifier_tests.cpp
 )
 

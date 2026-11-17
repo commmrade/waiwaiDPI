@@ -445,7 +445,7 @@ TEST_CASE_METHOD(SplitterTestFixture, "Seqovl segmentation", "[splitter_modifier
     auto& conn = conn_iter->second;
     conn.track(packet_1_view);
     conn.reasm_insert(packet_1_view);
-    conn.set_mss(1571 + 24); // payload is 1571 bytes
+    conn.set_mss(1571 + 12); // payload is 1571 bytes
 
     auto res = classifier.classify(conn.reasm_get());
     REQUIRE(res.first == ClassifyResult::DONE);
