@@ -3,8 +3,8 @@
 //
 
 #include "fake.hpp"
-#include "algorithms/common.hpp"
-#include "args.hpp"
+#include "modify/args.hpp"
+#include "modify/fooling.hpp"
 #include "net/checksum.hpp"
 #include <algorithm>
 #include <ranges>
@@ -16,12 +16,12 @@ void Fake::process_fake(std::vector<Packet> &packets, ModifyContext &ctx)
    });
 
     if (args_.ipv4_ttl.has_value()) {
-        ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
+        fooling::ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
     }
 
     if (args_.ts_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            timestamp_offset(filtered_packets, args_.ts_offset.value());
+            fooling::timestamp_offset(filtered_packets, args_.ts_offset.value());
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
         }
@@ -29,14 +29,26 @@ void Fake::process_fake(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (args_.seq_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            sequence_offset(filtered_packets, args_.seq_offset.value());
+            fooling::sequence_offset(filtered_packets, args_.seq_offset.value());
         } else {
             SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
     }
 
     if (args_.badcksum) {
-        badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+        fooling::badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+    }
+
+    if (args_.tcp_md5) {
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            fooling::tcp_md5(filtered_packets);
+
+            for (auto& packet : packets) {
+                calc_packet_checksum(packet);
+            }
+        } else {
+            SPDLOG_ERROR("TCP MD5 is used only for TCP");
+        }
     }
 }
 
@@ -49,7 +61,9 @@ void Fake::modify(std::vector<Packet> &packets, ModifyContext &ctx)
     new_packet.action.packet_id = 0;
 
     std::vector<Packet> blob_packets;
-    for (auto i = 0; i < args_.repeats.value_or(1); ++i) {
+    const auto fake_n = static_cast<std::size_t>(args_.repeats.value_or(1));
+    blob_packets.reserve(fake_n);
+    for (std::size_t i = 0; i < fake_n; ++i) {
         blob_packets.push_back(new_packet);
         blob_packets.back().is_fake_blob = true;
         calc_packet_checksum(blob_packets.back());
@@ -60,7 +74,7 @@ void Fake::modify(std::vector<Packet> &packets, ModifyContext &ctx)
     packets.insert(
         packets.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
 }
-bool Fake::matches(const std::vector<Packet> &packets, const Connection &conn) const
+bool Fake::matches([[maybe_unused]] const std::vector<Packet> &packets, [[maybe_unused]] const Connection &conn) const
 {
     return true;
 }
@@ -112,5 +126,14 @@ void Fake::parse_config(const toml::table *table)
         }
 
         args_.repeats.emplace(repeats_node->as_integer()->get());
+    }
+
+    const auto* tcp_md5_node = table->get("tcp_md5");
+    if (tcp_md5_node != nullptr) {
+        if (!tcp_md5_node->is_boolean()) {
+            throw std::runtime_error("tcp_md5 must be a boolean");
+        }
+
+        args_.tcp_md5 = tcp_md5_node->as_boolean()->get();
     }
 }

@@ -2,10 +2,10 @@
 // Created by klewy on 11/9/26.
 //
 
+#include "../src/modify/common.hpp"
 #include "classify/udp/quic_classifier.hpp"
 #include "common.hpp"
 #include "conntrack/conn_tracker.hpp"
-#include "modify/algorithms/common.hpp"
 #include "modify/markers.hpp"
 #include <catch2/catch_all.hpp>
 #include <span>

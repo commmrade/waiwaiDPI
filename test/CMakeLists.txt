@@ -54,11 +54,11 @@ add_executable(tests
         ../src/modify/modifier.cpp
         ../src/modify/tcp/splitter.cpp
         ../src/modify/tcp/disorder.cpp
-        ../src/modify/algorithms/split.cpp
+        ../src/modify/split.cpp
         ../src/sys/nfq.cpp
         ../src/modify/args.cpp
         tcp_state_tests.cpp
-        ../src/modify/algorithms/common.cpp
+        ../src/modify/common.cpp
         ../src/modify/markers.cpp
         splitter_general_tests.cpp
         ../src/sys/iface.cpp

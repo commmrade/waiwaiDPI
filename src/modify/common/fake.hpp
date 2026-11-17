@@ -14,6 +14,7 @@ class Fake : public IModifier
         std::vector<char> fake_blob;
         std::optional<std::uint8_t> ipv4_ttl;
         bool badcksum{false};
+        bool tcp_md5{false};
         std::optional<int> seq_offset;
         std::optional<int> ts_offset;
         std::optional<int> repeats;

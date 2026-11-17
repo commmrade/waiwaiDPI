@@ -4,9 +4,10 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "modify/tcp/disorder.hpp"
-#include "modify/algorithms/common.hpp"
-#include "modify/algorithms/split.hpp"
+#include "../common.hpp"
+#include "../split.hpp"
 #include "modify/args.hpp"
+#include "modify/fooling.hpp"
 #include "modify/markers.hpp"
 #include "net/checksum.hpp"
 #include "spdlog/spdlog.h"
@@ -120,7 +121,7 @@ void Disorder::process_fake(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (args_.seq_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            sequence_offset(filtered_packets, args_.seq_offset.value());
+            fooling::sequence_offset(filtered_packets, args_.seq_offset.value());
         } else {
             SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
@@ -128,18 +129,26 @@ void Disorder::process_fake(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (args_.ts_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            timestamp_offset(filtered_packets, args_.ts_offset.value());
+            fooling::timestamp_offset(filtered_packets, args_.ts_offset.value());
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
         }
     }
 
     if (args_.ipv4_ttl.has_value()) {
-        ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
+        fooling::ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
     }
 
     if (args_.badcksum) {
-        badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+        fooling::badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+    }
+
+    if (args_.tcp_md5) {
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            fooling::tcp_md5(filtered_packets);
+        } else {
+            SPDLOG_ERROR("TCP MD5 is used only for TCP");
+        }
     }
 }
 void Disorder::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
@@ -149,8 +158,13 @@ void Disorder::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
     });
 
     if (!args_.splits.empty()) {
+        SPDLOG_INFO("DOING SPLIT");
         for (const auto &split_pos : args_.splits) {
-            auto res = split::split(packets, split_pos, ctx.markers, ctx.conn.get().payload_proto());
+            auto split_view = std::ranges::views::filter(packets, [](const Packet &packet) {
+                return !packet.is_fake_blob;
+            });
+
+            auto res = split::split(split_view, split_pos, ctx.markers, ctx.conn.get().payload_proto());
             if (!res) {
                 SPDLOG_WARN(
                     "Wasn't able to split packet at {}:{}, because: {}", split_pos.arg, split_pos.offset, res.error());
@@ -160,7 +174,7 @@ void Disorder::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (args_.seq_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            sequence_offset(filtered_packets, args_.seq_offset.value());
+            fooling::sequence_offset(filtered_packets, args_.seq_offset.value());
         } else {
             SPDLOG_ERROR("Seq. Offset is defined but the L4 protocol is not TCP");
         }
@@ -168,14 +182,14 @@ void Disorder::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (args_.ts_offset.has_value()) {
         if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
-            timestamp_offset(filtered_packets, args_.ts_offset.value());
+            fooling::timestamp_offset(filtered_packets, args_.ts_offset.value());
         } else {
             SPDLOG_WARN("TS Offset is defined but the protocol is not TCP");
         }
     }
 
     if (args_.ipv4_ttl.has_value()) {
-        ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
+        fooling::ipv4_ttl(filtered_packets, args_.ipv4_ttl.value());
     }
 
     if (args_.seqovl.has_value()) {
@@ -199,7 +213,15 @@ void Disorder::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
     }
 
     if (args_.badcksum) {
-        badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+        fooling::badchecksum(filtered_packets, ctx.conn.get().get_l4_proto());
+    }
+
+    if (args_.tcp_md5) {
+        if (ctx.conn.get().get_l4_proto() == IPPROTO_TCP) {
+            fooling::tcp_md5(filtered_packets);
+        } else {
+            SPDLOG_ERROR("TCP MD5 is used only for TCP");
+        }
     }
 }
 
@@ -213,16 +235,15 @@ void Disorder::modify(std::vector<Packet> &packets, ModifyContext& ctx)
         new_packet.action.packet_id = 0;
 
         std::vector<Packet> blob_packets;
-        blob_packets.push_back(std::move(new_packet));
-        blob_packets.front().is_fake_blob = true;
-
-        if (blob_packets.front().network_hdr()->protocol == IPPROTO_TCP) {
-            calc_packet_checksum(blob_packets.front());
+        const auto fake_n = static_cast<std::size_t>(args_.repeats.value_or(1));
+        blob_packets.reserve(fake_n);
+        for (std::size_t i = 0; i < fake_n; ++i) {
+            blob_packets.push_back(new_packet);
+            blob_packets.back().is_fake_blob = true;
+            calc_packet_checksum(blob_packets.back());
         }
 
         process_fake(blob_packets, ctx);
-
-        for (auto &packet : blob_packets) { packet.is_fake_blob = true; }
 
         packets.insert(
             packets.begin(), std::make_move_iterator(blob_packets.begin()), std::make_move_iterator(blob_packets.end()));
@@ -325,5 +346,23 @@ void Disorder::parse_config(const toml::table *table)
 
         auto buf = parse_blob(seqovl_ptrn_node->as_string()->get());
         args_.seqovl_pat.emplace(std::move(buf));
+    }
+
+    const auto* tcp_md5_node = table->get("tcp_md5");
+    if (tcp_md5_node != nullptr) {
+        if (!tcp_md5_node->is_boolean()) {
+            throw std::runtime_error("tcp_md5 must be a boolean");
+        }
+
+        args_.tcp_md5 = tcp_md5_node->as_boolean()->get();
+    }
+
+    const auto* repeats_node = table->get("repeats");
+    if (repeats_node != nullptr) {
+        if (!repeats_node->is_number()) {
+            throw std::runtime_error("'repeats' must be a number");
+        }
+
+        args_.repeats.emplace(repeats_node->as_integer()->get());
     }
 }

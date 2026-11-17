@@ -4,11 +4,11 @@
 
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "modifier.hpp"
-#include "algorithms/common.hpp"
+#include "common.hpp"
 #include <algorithm>
+#include <ranges>
 #include <spdlog/spdlog.h>
 #include <vector>
-#include <ranges>
 
 bool Modifier::filter(const std::vector<Packet> &packets, std::span<const char> full_payload, const Markers &markers)
 {
@@ -28,6 +28,7 @@ bool Modifier::filter(const std::vector<Packet> &packets, std::span<const char> 
 
 void Modifier::modify(std::vector<Packet> &vec, const Connection &conn)
 {
+    SPDLOG_INFO("I hagve {} modifiers", modifiers_.size());
     auto filtered_packets = std::ranges::views::filter(vec, [](const Packet &packet) {
         return !packet.is_fake_blob;
     });

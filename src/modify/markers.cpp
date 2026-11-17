@@ -3,9 +3,9 @@
 //
 
 #include "markers.hpp"
-#include "algorithms/split.hpp"
-#include <cassert>
+#include "split.hpp"
 #include "util/safespan.hpp"
+#include <cassert>
 
 std::expected<Markers, std::string> find_markers_http(std::span<const char> payload)
 {

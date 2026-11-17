@@ -57,7 +57,7 @@ void split_and_insert_packets_tcp(std::ranges::iterator_t<Range> iter,
     const auto pkt_view = parse_packet_view(pkt);
     const auto pkt_payload = pkt.payload();
     const std::span<const char> part2{
-        std::next(pkt_payload.begin(), static_cast<std::ptrdiff_t>(split_pos_relative_to_packet)), pkt_payload.end()
+        std::next(pkt_payload.begin(), static_cast<std::ptrdiff_t>(split_pos_relative_to_packet)), pkt_payload.end(),
     };
 
     // Second packet
@@ -87,9 +87,8 @@ void split_and_insert_packets_tcp(std::ranges::iterator_t<Range> iter,
         packets.insert(iter + 1, std::move(second));
     } else {
         // view: нужен base + insert
-        auto &base = packets.base();
-        auto base_it = base.begin() + std::distance(packets.begin(), iter);
-        base.insert(base_it + 1, std::move(second));
+        auto &vec = packets.base().base();
+        vec.insert(std::next(iter.base()), std::move(second));
     }
 }
 }
@@ -123,10 +122,8 @@ namespace split {
         }
 
         auto [iter, split_pos_relative_to_packet] = helpers::find_packet_by_offset(packets, split_pos);
-        // split iter packet at split_pos_relative_to_packet
-        if (split_pos_relative_to_packet == -1) {
-            // already split naturally
-            return { true };
+        if (iter == std::ranges::end(packets)) {
+            return std::unexpected{"Could not find packet by offset"};
         }
 
         helpers::split_and_insert_packets_tcp(iter, split_pos_relative_to_packet, packets);
@@ -158,15 +155,13 @@ namespace split {
             split_pos = offset;
         }
 
-        auto [iter, rel] = helpers::find_packet_by_offset(packets, split_pos);
-        // split iter packet at split_pos_relative_to_packet
-        if (rel == -1) {
-            // already split naturally
-            return { true };
-        }
+         auto [iter, rel] = helpers::find_packet_by_offset(packets, split_pos);
+         if (iter == std::ranges::end(packets)) {
+             return std::unexpected{"Could not find packet by offset"};
+         }
 
-        helpers::split_and_insert_packets_tcp(iter, rel, packets);
-        return { true };
+         helpers::split_and_insert_packets_tcp(iter, rel, packets);
+         return { true };
     }
 
     template<std::ranges::range Range>
