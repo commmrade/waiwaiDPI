@@ -158,8 +158,13 @@ void Disorder::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
     });
 
     if (!args_.splits.empty()) {
+        SPDLOG_INFO("DOING SPLIT");
         for (const auto &split_pos : args_.splits) {
-            auto res = split::split(packets, split_pos, ctx.markers, ctx.conn.get().payload_proto());
+            auto split_view = std::ranges::views::filter(packets, [](const Packet &packet) {
+                return !packet.is_fake_blob;
+            });
+
+            auto res = split::split(split_view, split_pos, ctx.markers, ctx.conn.get().payload_proto());
             if (!res) {
                 SPDLOG_WARN(
                     "Wasn't able to split packet at {}:{}, because: {}", split_pos.arg, split_pos.offset, res.error());

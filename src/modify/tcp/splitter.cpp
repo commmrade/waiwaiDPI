@@ -62,7 +62,11 @@ void Splitter::process_orig(std::vector<Packet> &packets, ModifyContext &ctx)
 
     if (!args_.splits.empty()) {
         for (const auto &split_pos : args_.splits) {
-            auto res = split::split(packets, split_pos, ctx.markers, ctx.conn.get().payload_proto());
+            auto split_view = std::ranges::views::filter(packets, [](const Packet &packet) {
+                return !packet.is_fake_blob;
+            });
+
+            auto res = split::split(split_view, split_pos, ctx.markers, ctx.conn.get().payload_proto());
             if (!res) {
                 SPDLOG_WARN(
                     "Wasn't able to split packet at {}:{}, because: {}", split_pos.arg, split_pos.offset, res.error());
@@ -144,7 +148,7 @@ void Splitter::seqovl(std::vector<Packet> &packets, const Connection &conn)
     auto *ip = packet.network_hdr();
 
     const auto mss =
-        static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(tcp));
+        static_cast<std::size_t>(conn.get_mss()) - (ip->ihl * 4 - sizeof(iphdr)) - (tcp->doff * 4 - sizeof(*tcp));
 
     if (new_payload.size() > mss) {
         auto start_seq = ntohl(tcp->seq) - static_cast<std::uint32_t>(args_.seqovl.value());

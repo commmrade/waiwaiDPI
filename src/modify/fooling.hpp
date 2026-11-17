@@ -54,13 +54,13 @@ void badchecksum(Range& packets, const int l4_proto)
         for (auto &packet : packets) {
             auto *tcp = static_cast<tcphdr *>(packet.transport_hdr());
             tcp->check = 0;
-            tcp->check = htonl(rand() % 256);
+            tcp->check = htons(rand() % 256);
         }
     } else {
         for (auto& packet : packets) {
             auto* udp = static_cast<udphdr*>(packet.transport_hdr());
             udp->check = 0;
-            udp->check = htonl(rand() % 256);
+            udp->check = htons(rand() % 256);
         }
     }
 }
