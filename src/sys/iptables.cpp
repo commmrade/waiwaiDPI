@@ -6,6 +6,7 @@
 
 #include <cstring>
 
+namespace iptables {
 void close_pipe(FILE *pipe) { pclose(pipe); }
 
 bool rule_exists(const std::string_view rule)
@@ -34,3 +35,4 @@ void rule_remove(const std::string_view rule)
     int ret = system(rule.data());
     if (ret < 0) { throw std::runtime_error(std::strerror(errno)); }
 }
+} // namespace iptables

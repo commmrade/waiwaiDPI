@@ -193,7 +193,7 @@ std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>
 
 
         // set up a rule
-        if (!rule_exists(std::format("-A OUTPUT -p {} -m {} --dport {} "
+        if (!iptables::rule_exists(std::format("-A OUTPUT -p {} -m {} --dport {} "
                                      "-m connbytes --connbytes 0:{} --connbytes-dir original --connbytes-mode packets "
                                      "-j NFQUEUE --queue-num {}",
                 protocol_str,
@@ -201,7 +201,7 @@ std::unordered_map<std::pair<std::uint16_t, int>, Profile, pair_hash>
                 port,
                 Connection::MAX_REASM_SEGMENTS(),
                 queue_number))) {
-            rule_add(
+            iptables::rule_add(
                 std::format("iptables -A OUTPUT -p {} --dport {} "
                             "-m connbytes --connbytes 0:{} --connbytes-dir original --connbytes-mode packets "
                             "-j NFQUEUE --queue-num {}",

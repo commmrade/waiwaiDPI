@@ -8,10 +8,12 @@
 #include <stdio.h>
 #include <string_view>
 
+namespace iptables {
 void close_pipe(FILE* pipe);
 
 bool rule_exists(const std::string_view rule);
 void rule_add(const std::string_view rule);
 void rule_remove(const std::string_view rule);
+} // namespace iptables
 
 #endif// WAIWAIDPI_IPTABLES_HPP
