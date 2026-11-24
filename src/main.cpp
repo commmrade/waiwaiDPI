@@ -196,8 +196,8 @@ int main(int argc, char *argv[])
     }
 
     int mark = 0x14;
-    if (!rule_exists(std::format("-A OUTPUT -m mark --mark {} -j ACCEPT", mark))) {
-        rule_add(std::format("iptables -A OUTPUT -m mark --mark {} -j ACCEPT", mark));
+    if (!iptables::rule_exists(std::format("-A OUTPUT -m mark --mark {} -j ACCEPT", mark))) {
+        iptables::rule_add(std::format("iptables -A OUTPUT -m mark --mark {} -j ACCEPT", mark));
     }
 
     ConnTracker tracker{};
@@ -308,7 +308,7 @@ int main(int argc, char *argv[])
         } else {
             throw std::runtime_error("Unknown protocol");
         }
-        rule_remove(
+        iptables::rule_remove(
             std::format("iptables -D OUTPUT -p {} -m {} --dport {} "
                         "-m connbytes --connbytes 0:{} --connbytes-dir original --connbytes-mode packets "
                         "-j NFQUEUE --queue-num {}",
@@ -319,7 +319,7 @@ int main(int argc, char *argv[])
                 queue_number)
                 .c_str());
     }
-    rule_remove(std::format("iptables -D OUTPUT -m mark --mark {} -j ACCEPT", mark));
+    iptables::rule_remove(std::format("iptables -D OUTPUT -m mark --mark {} -j ACCEPT", mark));
 
     mnl_socket_close(socket);
     return EXIT_SUCCESS;

@@ -22,6 +22,7 @@ bool rule_exists(const std::string_view rule)
     response.resize(rd);
 
     return response.contains(rule);
+    return false;
 }
 
 void rule_add(const std::string_view rule)
